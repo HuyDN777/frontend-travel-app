@@ -1,98 +1,226 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { Card } from '@/components/ui/card';
+import { Colors, Elevation, Radius, Spacing, Typography } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+
+const destinations = [
+  {
+    id: 'hanoi',
+    title: 'Hà Nội',
+    subtitle: 'Phố cổ & ẩm thực đường phố',
+    image:
+      'https://images.unsplash.com/photo-1583417319070-4a69db38a482?auto=format&fit=crop&w=900&q=80',
+  },
+  {
+    id: 'danang',
+    title: 'Đà Nẵng',
+    subtitle: 'Biển xanh & Bà Nà Hills',
+    image:
+      'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=900&q=80',
+  },
+];
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+  const scheme = useColorScheme() ?? 'light';
+  const palette = Colors[scheme];
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  return (
+    <View style={[styles.root, { backgroundColor: palette.background }]}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <Image
+              source={{ uri: 'https://i.pravatar.cc/100?img=12' }}
+              style={[styles.avatar, { borderColor: palette.border }]}
+            />
+            <View>
+              <Text style={[Typography.caption, { color: palette.textMuted }]}>Good Morning,</Text>
+              <Text style={[Typography.titleLG, { color: palette.text }]}>Hello Traveler</Text>
+            </View>
+          </View>
+          <View style={[styles.bellWrap, { backgroundColor: palette.surface }]}>
+            <Ionicons name="notifications-outline" size={18} color={palette.icon} />
+          </View>
+        </View>
+
+        <View style={[styles.search, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+          <Ionicons name="search-outline" size={18} color={palette.textMuted} />
+          <Text style={[Typography.body, { color: palette.textMuted }]}>Where to next?</Text>
+        </View>
+
+        <View style={styles.quickGrid}>
+          {[
+            { icon: 'airplane-outline', label: 'Flights' },
+            { icon: 'car-outline', label: 'Rides' },
+            { icon: 'restaurant-outline', label: 'Restaurants' },
+            { icon: 'bed-outline', label: 'Hotels' },
+          ].map((item) => (
+            <Card key={item.label} style={styles.quickCard}>
+              <View style={[styles.quickIcon, { backgroundColor: '#F6EEDA' }]}>
+                <Ionicons name={item.icon as any} size={16} color={palette.text} />
+              </View>
+              <Text style={[Typography.bodySemi, { color: palette.text }]}>{item.label}</Text>
+            </Card>
+          ))}
+        </View>
+
+        <View style={styles.sectionHead}>
+          <Text style={[Typography.titleLG, styles.sectionTitle, { color: palette.text }]}>
+            Trending Destinations
+          </Text>
+          <View style={[styles.viewAll, { backgroundColor: '#2F3338' }]}>
+            <Text style={[Typography.caption, { color: '#FFF' }]}>View All</Text>
+          </View>
+        </View>
+
+        <View style={styles.destinationRow}>
+          {destinations.map((item) => (
+            <View key={item.id} style={styles.destinationCard}>
+              <Image source={{ uri: item.image }} style={styles.destinationImage} contentFit="cover" />
+              <View style={styles.destinationOverlay}>
+                <Text style={[Typography.titleLG, styles.destinationTitle]}>{item.title}</Text>
+                <Text style={[Typography.body, styles.destinationSubtitle]}>{item.subtitle}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      </ScrollView>
+
+      <View style={styles.fabGroup}>
+        {['sparkles-outline', 'play-outline', 'map-outline', 'location-outline'].map((iconName) => (
+          <View key={iconName} style={[styles.fab, { backgroundColor: '#C35F44' }]}>
+            <Ionicons name={iconName as any} size={20} color="#FFF" />
+          </View>
+        ))}
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
+  root: {
+    flex: 1,
+  },
+  content: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.xl,
+    paddingBottom: 120,
+    gap: Spacing.lg,
+  },
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'space-between',
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  bellWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Elevation.card,
+  },
+  search: {
+    height: 52,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    ...Elevation.card,
+  },
+  quickGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: Spacing.md,
+  },
+  quickCard: {
+    width: '48%',
+    minHeight: 110,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+  },
+  quickIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sectionTitle: {
+    fontSize: 32,
+    lineHeight: 36,
+    maxWidth: '72%',
+  },
+  viewAll: {
+    borderRadius: Radius.pill,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+  },
+  destinationRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  destinationCard: {
+    width: '48%',
+    height: 280,
+    borderRadius: Radius.lg,
+    overflow: 'hidden',
+  },
+  destinationImage: {
+    width: '100%',
+    height: '100%',
+  },
+  destinationOverlay: {
+    position: 'absolute',
     bottom: 0,
     left: 0,
+    right: 0,
+    padding: Spacing.md,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  destinationTitle: {
+    color: '#FFF',
+    fontSize: 36,
+    lineHeight: 38,
+  },
+  destinationSubtitle: {
+    color: '#FFF',
+  },
+  fabGroup: {
     position: 'absolute',
+    right: 18,
+    bottom: 92,
+    gap: Spacing.sm,
+  },
+  fab: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Elevation.floating,
   },
 });
