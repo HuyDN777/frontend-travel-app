@@ -18,8 +18,8 @@ import { Chip } from '@/components/ui/chip';
 import { Input } from '@/components/ui/input';
 import { Colors, Elevation, Radius, Spacing, Typography } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-
-const API_BASE_URL = 'http://localhost:8080/api/v1';
+import { createTrip } from '@/utils/api';
+import { getSessionUserId } from '@/utils/session';
 
 const recentSearches = ['Kyoto, Japan', 'Seoul, South Korea', 'Taipei, Taiwan'];
 
@@ -84,6 +84,12 @@ export default function CreateTripScreen() {
     }
 
     async function handleCreateTrip() {
+        const userId = getSessionUserId();
+        if (!userId) {
+            router.replace('/login');
+            return;
+        }
+
         if (!destination || !startDate || !endDate) {
             alert('Please fill in all fields');
             return;
@@ -91,27 +97,13 @@ export default function CreateTripScreen() {
 
         setLoading(true);
         try {
-            // Mock userId = 1 for now
-            const userId = 1;
-
-            const response = await fetch(`${API_BASE_URL}/create-trip/${userId}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    tripName: destination,
-                    destination: destination,
-                    startDate: startDate.toISOString().split('T')[0],
-                    endDate: endDate.toISOString().split('T')[0],
-                    status: 'PLANNED',
-                    userId: userId,
-                }),
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to create trip');
-            }
+            await createTrip({
+                tripName: destination,
+                destination: destination,
+                startDate: startDate.toISOString().split('T')[0],
+                endDate: endDate.toISOString().split('T')[0],
+                status: 'PLANNED',
+            }, userId);
 
             // Navigate to itinerary upon success
             router.push('/(tabs)/itinerary');
