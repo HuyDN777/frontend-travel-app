@@ -1,112 +1,213 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
-import { Collapsible } from '@/components/ui/collapsible';
-import { ExternalLink } from '@/components/external-link';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Fonts } from '@/constants/theme';
+import { CommunityPostCard } from '@/components/ui/community-post-card';
+import { Colors, Radius, Spacing } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import {
+  deleteCommunityPost,
+  getCommunityFeed,
+  toggleLike,
+  toggleSave,
+  type CommunityPost,
+} from '@/utils/api';
+import { moderateScale } from '@/utils/responsive';
+import { getSessionUserId } from '@/utils/session';
 
-export default function TabTwoScreen() {
+export default function CommunityScreen() {
+  const scheme = useColorScheme() ?? 'light';
+  const palette = Colors[scheme];
+  const router = useRouter();
+
+  const [posts, setPosts] = useState<CommunityPost[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadFeed = useCallback(async () => {
+    const userId = getSessionUserId();
+    if (!userId) {
+      router.replace('/login');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const feed = await getCommunityFeed(userId);
+      setPosts(feed);
+    } catch (error: any) {
+      Alert.alert('Error', error?.message ?? 'Khong tai duoc community feed');
+    } finally {
+      setLoading(false);
+    }
+  }, [router]);
+
+  useEffect(() => {
+    loadFeed();
+  }, [loadFeed]);
+
+  async function handleRefresh() {
+    const userId = getSessionUserId();
+    if (!userId) {
+      router.replace('/login');
+      return;
+    }
+
+    try {
+      setRefreshing(true);
+      const feed = await getCommunityFeed(userId);
+      setPosts(feed);
+    } catch (error: any) {
+      Alert.alert('Error', error?.message ?? 'Khong refresh duoc feed');
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  async function handleLike(postId: number) {
+    const userId = getSessionUserId();
+    if (!userId) {
+      router.replace('/login');
+      return;
+    }
+
+    try {
+      await toggleLike(postId, userId);
+      await loadFeed();
+    } catch (error: any) {
+      Alert.alert('Error', error?.message ?? 'Khong the like bai viet');
+    }
+  }
+
+  async function handleSave(postId: number) {
+    const userId = getSessionUserId();
+    if (!userId) {
+      router.replace('/login');
+      return;
+    }
+
+    try {
+      await toggleSave(postId, userId);
+      await loadFeed();
+    } catch (error: any) {
+      Alert.alert('Error', error?.message ?? 'Khong the save bai viet');
+    }
+  }
+
+  function handleEdit(postId: number) {
+    router.push({ pathname: '/community-post-editor', params: { postId: String(postId) } });
+  }
+
+  async function handleDelete(postId: number) {
+    Alert.alert('Delete post', 'Ban co chac muon xoa bai viet?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            const userId = getSessionUserId();
+            if (!userId) {
+              router.replace('/login');
+              return;
+            }
+            await deleteCommunityPost(postId, userId);
+            await loadFeed();
+          } catch (error: any) {
+            Alert.alert('Error', error?.message ?? 'Khong the xoa bai viet');
+          }
+        },
+      },
+    ]);
+  }
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-      headerImage={
-        <IconSymbol
-          size={310}
-          color="#808080"
-          name="chevron.left.forwardslash.chevron.right"
-          style={styles.headerImage}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText
-          type="title"
-          style={{
-            fontFamily: Fonts.rounded,
-          }}>
-          Explore
-        </ThemedText>
-      </ThemedView>
-      <ThemedText>This app includes example code to help you get started.</ThemedText>
-      <Collapsible title="File-based routing">
-        <ThemedText>
-          This app has two screens:{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/explore.tsx</ThemedText>
-        </ThemedText>
-        <ThemedText>
-          The layout file in <ThemedText type="defaultSemiBold">app/(tabs)/_layout.tsx</ThemedText>{' '}
-          sets up the tab navigator.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/router/introduction">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Android, iOS, and web support">
-        <ThemedText>
-          You can open this project on Android, iOS, and the web. To open the web version, press{' '}
-          <ThemedText type="defaultSemiBold">w</ThemedText> in the terminal running this project.
-        </ThemedText>
-      </Collapsible>
-      <Collapsible title="Images">
-        <ThemedText>
-          For static images, you can use the <ThemedText type="defaultSemiBold">@2x</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">@3x</ThemedText> suffixes to provide files for
-          different screen densities
-        </ThemedText>
-        <Image
-          source={require('@/assets/images/react-logo.png')}
-          style={{ width: 100, height: 100, alignSelf: 'center' }}
-        />
-        <ExternalLink href="https://reactnative.dev/docs/images">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Light and dark mode components">
-        <ThemedText>
-          This template has light and dark mode support. The{' '}
-          <ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-          what the user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Animations">
-        <ThemedText>
-          This template includes an example of an animated component. The{' '}
-          <ThemedText type="defaultSemiBold">components/HelloWave.tsx</ThemedText> component uses
-          the powerful{' '}
-          <ThemedText type="defaultSemiBold" style={{ fontFamily: Fonts.mono }}>
-            react-native-reanimated
-          </ThemedText>{' '}
-          library to create a waving hand animation.
-        </ThemedText>
-        {Platform.select({
-          ios: (
-            <ThemedText>
-              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-              component provides a parallax effect for the header image.
-            </ThemedText>
-          ),
-        })}
-      </Collapsible>
-    </ParallaxScrollView>
+    <ThemedView style={styles.root}>
+      <View style={styles.header}>
+        <ThemedText type="title" style={styles.title}>Community Guides</ThemedText>
+
+        <View style={styles.headerActions}>
+          <Pressable
+            onPress={() => router.push('/community-post-editor')}
+            style={[styles.createBtn, { backgroundColor: palette.primary }]}
+          >
+            <Ionicons name="add" size={moderateScale(18)} color={palette.text} />
+          </Pressable>
+          <Pressable style={[styles.searchBtn, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+            <Ionicons name="search-outline" size={moderateScale(18)} color={palette.text} />
+          </Pressable>
+        </View>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
+      >
+        {posts.map((post) => (
+          <CommunityPostCard
+            key={post.id}
+            post={post}
+            canEdit={post.userId === getSessionUserId()}
+            onLike={() => handleLike(post.id)}
+            onSave={() => handleSave(post.id)}
+            onEdit={() => handleEdit(post.id)}
+            onDelete={() => handleDelete(post.id)}
+          />
+        ))}
+
+        {!loading && posts.length === 0 ? (
+          <ThemedText style={[styles.emptyText, { color: palette.textMuted }]}>No posts yet.</ThemedText>
+        ) : null}
+      </ScrollView>
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  headerImage: {
-    color: '#808080',
-    bottom: -90,
-    left: -35,
-    position: 'absolute',
+  root: {
+    flex: 1,
   },
-  titleContainer: {
+  header: {
+    paddingTop: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
     flexDirection: 'row',
-    gap: 8,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  title: {
+    fontSize: moderateScale(28),
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  createBtn: {
+    width: moderateScale(36),
+    height: moderateScale(36),
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchBtn: {
+    width: moderateScale(36),
+    height: moderateScale(36),
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  content: {
+    padding: Spacing.lg,
+    gap: Spacing.md,
+    paddingBottom: Spacing['2xl'],
+  },
+  emptyText: {
+    textAlign: 'center',
+    marginTop: Spacing.xl,
   },
 });
