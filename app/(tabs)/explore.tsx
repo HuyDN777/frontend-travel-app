@@ -1,90 +1,223 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Colors, Spacing, Typography } from '@/constants/theme';
+import { ThemedText } from '@/components/themed-text';
+import { ThemedView } from '@/components/themed-view';
+import { CommunityPostCard } from '@/components/ui/community-post-card';
+import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import {
+  deleteCommunityPost,
+  getCommunityFeed,
+  toggleLike,
+  toggleSave,
+  type CommunityPost,
+} from '@/utils/api';
+import { moderateScale } from '@/utils/responsive';
+import { getSessionUserId } from '@/utils/session';
 
-/**
- * Tab phụ — mô tả use case mục 4 (không thêm tính năng ngoài phạm vi).
- */
-export default function Uc04InfoScreen() {
-  const router = useRouter();
-  const insets = useSafeAreaInsets();
+export default function CommunityScreen() {
   const scheme = useColorScheme() ?? 'light';
   const palette = Colors[scheme];
+  const router = useRouter();
 
-  const steps = [
-    'Chatbot hỏi lần lượt: điểm đến, số ngày, sở thích, ngân sách, ngày bắt đầu (tuỳ chọn).',
-    'Sau khi xác nhận tóm tắt, hệ thống gọi dịch vụ AI (hoặc demo cùng schema).',
-    'Nhận lịch theo ngày: điểm thăm, ước tính thời gian, gợi ý nhà hàng.',
-    'Duyệt, bật/tắt từng hoạt động, chỉnh sửa nội dung nếu cần, tạo lại gợi ý.',
-    'Áp dụng → chuyển thành DayPlan (draft), lưu qua planDraftStore.',
-  ];
+  const [posts, setPosts] = useState<CommunityPost[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadFeed = useCallback(async () => {
+    const userId = getSessionUserId();
+    if (!userId) {
+      router.replace('/login');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const feed = await getCommunityFeed(userId);
+      setPosts(feed);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : 'Không tải được bảng tin cộng đồng';
+      Alert.alert('Lỗi', msg);
+    } finally {
+      setLoading(false);
+    }
+  }, [router]);
+
+  useEffect(() => {
+    void loadFeed();
+  }, [loadFeed]);
+
+  async function handleRefresh() {
+    const userId = getSessionUserId();
+    if (!userId) {
+      router.replace('/login');
+      return;
+    }
+
+    try {
+      setRefreshing(true);
+      const feed = await getCommunityFeed(userId);
+      setPosts(feed);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : 'Không làm mới được';
+      Alert.alert('Lỗi', msg);
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  async function handleLike(postId: number) {
+    const userId = getSessionUserId();
+    if (!userId) {
+      router.replace('/login');
+      return;
+    }
+
+    try {
+      await toggleLike(postId, userId);
+      await loadFeed();
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : 'Không thực hiện được';
+      Alert.alert('Lỗi', msg);
+    }
+  }
+
+  async function handleSave(postId: number) {
+    const userId = getSessionUserId();
+    if (!userId) {
+      router.replace('/login');
+      return;
+    }
+
+    try {
+      await toggleSave(postId, userId);
+      await loadFeed();
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : 'Không thực hiện được';
+      Alert.alert('Lỗi', msg);
+    }
+  }
+
+  function handleEdit(postId: number) {
+    router.push({ pathname: '/community-post-editor', params: { postId: String(postId) } });
+  }
+
+  async function handleDelete(postId: number) {
+    Alert.alert('Xóa bài', 'Bạn có chắc muốn xóa bài viết?', [
+      { text: 'Hủy', style: 'cancel' },
+      {
+        text: 'Xóa',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            const userId = getSessionUserId();
+            if (!userId) {
+              router.replace('/login');
+              return;
+            }
+            await deleteCommunityPost(postId, userId);
+            await loadFeed();
+          } catch (error: unknown) {
+            const msg = error instanceof Error ? error.message : 'Không xóa được';
+            Alert.alert('Lỗi', msg);
+          }
+        },
+      },
+    ]);
+  }
 
   return (
-    <View style={[styles.root, { backgroundColor: palette.background }]}>
-      <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + Spacing.xl }]}
-        showsVerticalScrollIndicator={false}
-      >
-        <Text style={[Typography.titleXL, { color: palette.text }]}>Mục 4 — Chatbot lịch AI</Text>
-        <Text style={[Typography.body, { color: palette.textMuted, marginTop: Spacing.sm }]}>
-          Giao diện hội thoại: thu tham số qua chat → gọi AI → duyệt lịch → DayPlan nháp.
-        </Text>
+    <ThemedView style={styles.root}>
+      <View style={styles.header}>
+        <ThemedText type="title" style={styles.title}>
+          Cộng đồng
+        </ThemedText>
 
-        <Card style={{ marginTop: Spacing.lg }}>
-          {steps.map((s, i) => (
-            <View key={i} style={[styles.stepRow, i > 0 && { marginTop: Spacing.md }]}>
-              <View style={[styles.stepNum, { backgroundColor: palette.primary }]}>
-                <Text style={[Typography.caption, { color: '#0B1B18', fontWeight: '800' }]}>{i + 1}</Text>
-              </View>
-              <Text style={[Typography.body, { color: palette.text, flex: 1 }]}>{s}</Text>
-            </View>
-          ))}
-        </Card>
-
-        <Button
-          title="Bắt đầu thiết kế lịch trình cùng Hà"
-          onPress={() => router.push('/ai-itinerary')}
-          size="lg"
-          style={{ marginTop: Spacing.xl }}
-        />
-        <View style={[styles.hint, { marginTop: Spacing.md }]}>
-          <Ionicons name="document-text-outline" size={18} color={palette.textMuted} />
-          <Text style={[Typography.caption, { color: palette.textMuted, flex: 1 }]}>
-            Chi tiết kỹ thuật & API: README.md, BAO_CAO_PHAN_4.md
-          </Text>
+        <View style={styles.headerActions}>
+          <Pressable
+            onPress={() => router.push('/community-post-editor')}
+            style={[styles.iconBtn, { backgroundColor: palette.primary }]}
+            accessibilityLabel="Viết bài">
+            <Ionicons name="add" size={moderateScale(18)} color="#0B1B18" />
+          </Pressable>
+          <Pressable
+            onPress={() => router.push('/ai-itinerary')}
+            style={[styles.iconBtnOutline, { borderColor: palette.border, backgroundColor: palette.surface }]}
+            accessibilityLabel="Trợ lý lịch AI">
+            <Ionicons name="sparkles-outline" size={moderateScale(18)} color={palette.text} />
+          </Pressable>
         </View>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void handleRefresh()} />}
+      >
+        {posts.map((post) => (
+          <CommunityPostCard
+            key={post.id}
+            post={post}
+            canEdit={post.userId === getSessionUserId()}
+            onLike={() => void handleLike(post.id)}
+            onSave={() => void handleSave(post.id)}
+            onEdit={() => handleEdit(post.id)}
+            onDelete={() => void handleDelete(post.id)}
+          />
+        ))}
+
+        {!loading && posts.length === 0 ? (
+          <ThemedText style={[styles.emptyText, { color: palette.textMuted }]}>Chưa có bài viết nào.</ThemedText>
+        ) : null}
       </ScrollView>
-    </View>
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
-  content: {
-    paddingHorizontal: Spacing.lg,
+  root: {
+    flex: 1,
+  },
+  header: {
     paddingTop: Spacing.xl,
-  },
-  stepRow: {
+    paddingHorizontal: Spacing.lg,
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: Spacing.md,
-  },
-  stepNum: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
   },
-  hint: {
+  title: {
+    fontSize: moderateScale(26),
+  },
+  headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
+  },
+  iconBtn: {
+    width: moderateScale(38),
+    height: moderateScale(38),
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconBtnOutline: {
+    width: moderateScale(38),
+    height: moderateScale(38),
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  content: {
+    padding: Spacing.lg,
+    gap: Spacing.md,
+    paddingBottom: Spacing['2xl'],
+  },
+  emptyText: {
+    textAlign: 'center',
+    marginTop: Spacing.xl,
   },
 });

@@ -76,7 +76,11 @@ export default function CommunityPostEditorScreen() {
       return;
     }
 
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7, base64: false });
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.55,
+      base64: false,
+    });
 
     if (result.canceled) return;
 

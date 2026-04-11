@@ -8,13 +8,6 @@ export function searchFlights(params: FlightSearchParams) {
   });
 }
 
-export function priceFlightOffer(flightOfferPayload: unknown) {
-  return apiRequest<unknown>('/flights/price', {
-    method: 'POST',
-    body: JSON.stringify(flightOfferPayload),
-  });
-}
-
 export function bookFlight(bookingRequest: unknown) {
   return apiRequest<unknown>('/flights/book', {
     method: 'POST',

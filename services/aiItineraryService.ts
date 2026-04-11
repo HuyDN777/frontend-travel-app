@@ -17,29 +17,51 @@ import type {
 } from '@/types/aiItinerary';
 import { searchKnowledge, searchCityData, TourismItem, LocalResult } from './knowledgeService';
 
+function isUnreachableLocalhost(url: string): boolean {
+  const u = url.toLowerCase();
+  return u.includes('localhost') || u.includes('127.0.0.1');
+}
+
+/** Cùng logic IP dev với app chính — điện thoại không dùng được localhost trong extra. */
+function resolveBackendLanBase(): string | undefined {
+  const hostUri =
+    (Constants.expoConfig as { hostUri?: string } | null)?.hostUri ??
+    (Constants.manifest2 as { extra?: { expoClient?: { hostUri?: string } } } | null)?.extra?.expoClient
+      ?.hostUri;
+  if (hostUri) {
+    const host = hostUri.split(':')[0];
+    if (host) return `http://${host}:8080`;
+  }
+  return undefined;
+}
+
 function resolveAiItineraryUrl(): string | undefined {
   const env =
     typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_AI_ITINERARY_URL
       ? String(process.env.EXPO_PUBLIC_AI_ITINERARY_URL).trim()
       : '';
+  if (env) return env;
+
   const extra = (
     Constants.expoConfig?.extra as { aiItineraryUrl?: string } | undefined
   )?.aiItineraryUrl?.trim();
-  const url = env || extra || '';
-  
-  // Fallback để web dev mode có thể nối tới backend local
-  if (url.length > 0) {
-    return url;
+  if (extra && !isUnreachableLocalhost(extra)) {
+    return extra;
   }
-  
-  // Nếu chạy trên web và không config URL, thử localhost:8081 (dev environment)
+
+  const lan = resolveBackendLanBase();
+  if (lan) {
+    return `${lan}/api/v1/ai/itinerary`;
+  }
+
   if (typeof window !== 'undefined') {
-    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const isLocalhost =
+      window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     if (isLocalhost) {
-      return 'http://localhost:8081/api/v1/ai/itinerary';
+      return 'http://localhost:8080/api/v1/ai/itinerary';
     }
   }
-  
+
   return undefined;
 }
 
@@ -431,15 +453,20 @@ async function buildResponseFromKnowledge(req: AiItineraryRequest): Promise<AiIt
  */
 export async function requestAiItinerary(req: AiItineraryRequest): Promise<AiItineraryResponse> {
   if (API_URL) {
-    const res = await fetch(API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(req),
-    });
-    if (!res.ok) throw new Error(`AI itinerary HTTP ${res.status}`);
-    const data = (await res.json()) as AiItineraryResponse;
-    if (!data?.days?.length) throw new Error('Phản hồi AI không hợp lệ');
-    return data;
+    try {
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(req),
+      });
+      if (!res.ok) throw new Error(`AI itinerary HTTP ${res.status}`);
+      const data = (await res.json()) as AiItineraryResponse;
+      if (!data?.days?.length) throw new Error('Phản hồi AI không hợp lệ');
+      return data;
+    } catch {
+      await delay(500 + Math.floor(Math.random() * 400));
+      return buildResponseFromKnowledge(req);
+    }
   }
 
   await delay(900 + Math.floor(Math.random() * 600));

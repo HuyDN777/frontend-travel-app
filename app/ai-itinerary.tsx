@@ -699,7 +699,7 @@ export default function AiItineraryScreen() {
         : step === 'startDate'
           ? 'YYYY-MM-DD hoặc dùng nút Bỏ qua'
           : step === 'confirm'
-            ? 'Hoặc bấm nút cam bên dưới'
+            ? 'Bấm nút “Gợi ý lịch ngay” phía trên hoặc gõ tin nhắn'
             : '…';
 
   const showComposer = !result && !loading && ['destination', 'days', 'startDate', 'confirm'].includes(step);

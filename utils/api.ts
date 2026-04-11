@@ -65,6 +65,11 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   }
 
   if (!response.ok) {
+    if (response.status === 413) {
+      throw new Error(
+        'Ảnh hoặc dữ liệu gửi lên quá lớn (413). Hãy chọn ảnh nhỏ hơn, hoặc bảo backend tăng spring.servlet.multipart.max-file-size và restart.'
+      );
+    }
     const message = await response.text();
     throw new Error(message || `Request failed: ${response.status}`);
   }

@@ -1,5 +1,5 @@
-import { useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 
@@ -91,6 +91,30 @@ const LOCATION_ALIAS_TO_CODE: Record<string, string> = {
 
 const USD_TO_VND_RATE = 26000;
 
+function mapFlightSearchError(e: unknown): string {
+  const raw = e instanceof Error ? e.message : String(e);
+  if (/duffel|Duffel|travel\.flight/i.test(raw) && /api-key|api key|cấu hình|Chua cau hinh/i.test(raw)) {
+    return 'Backend chưa có khóa Duffel. Tạo application-local.yaml (xem application-local.example) hoặc set DUFFEL_API_KEY; chạy backend profile dev (PowerShell: mvn spring-boot:run "-Dspring-boot.run.profiles=dev")';
+  }
+  return raw || 'Không thể tìm chuyến bay';
+}
+
+/** Web: chặn mất focus ô nhập trước khi chip nhận click (nếu không, blur ẩn list và onPress không chạy). */
+function preventWebAutocompleteBlur(e: { preventDefault?: () => void; nativeEvent?: { preventDefault?: () => void } }) {
+  if (Platform.OS !== 'web') return;
+  e.preventDefault?.();
+  e.nativeEvent?.preventDefault?.();
+}
+
+const webBlockInputBlurProps =
+  Platform.OS === 'web'
+    ? ({
+        onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault(),
+        onPointerDown: preventWebAutocompleteBlur,
+        onPointerDownCapture: preventWebAutocompleteBlur,
+      } as const)
+    : {};
+
 function normalizeText(value: string) {
   return value
     .normalize('NFD')
@@ -99,6 +123,61 @@ function normalizeText(value: string) {
     .replace(/Đ/g, 'D')
     .toLowerCase()
     .trim();
+}
+
+/** Gợi ý sân bay: không dùng alias kiểu "vinh long".includes("vinh") — trùng logic detectCodeFromQuery. */
+function filterAirportSuggestions(query: string, excludeCode?: string): AirportOption[] {
+  const nq = normalizeText(query);
+  const byCode = new Map<string, { opt: AirportOption; rank: number }>();
+
+  const add = (opt: AirportOption, rank: number) => {
+    if (excludeCode && opt.code === excludeCode) return;
+    const prev = byCode.get(opt.code);
+    if (!prev || rank < prev.rank) byCode.set(opt.code, { opt, rank });
+  };
+
+  if (!nq) {
+    for (const code of ['SGN', 'HAN', 'DAD', 'VII', 'VCA', 'PQC', 'CXR', 'HPH']) {
+      const o = AIRPORT_OPTIONS.find((a) => a.code === code);
+      if (o) add(o, 10);
+    }
+    return Array.from(byCode.values())
+      .sort((a, b) => a.rank - b.rank || a.opt.label.localeCompare(b.opt.label, 'vi'))
+      .map((x) => x.opt);
+  }
+
+  for (const item of AIRPORT_OPTIONS) {
+    const city = normalizeText(item.city);
+    const label = normalizeText(item.label);
+    if (city === nq || label === nq) add(item, 0);
+    else if ((item.aliases ?? []).some((a) => normalizeText(a) === nq)) add(item, 1);
+    else if (city.startsWith(nq) || label.startsWith(nq)) add(item, 2);
+    else if (city.includes(nq) || label.includes(nq)) add(item, 3);
+    else if (nq.includes(' ') && (item.aliases ?? []).some((a) => normalizeText(a).startsWith(nq))) add(item, 4);
+  }
+
+  const raw = query.trim().toUpperCase();
+  if (raw && /^[A-Z]{1,3}$/.test(raw)) {
+    for (const item of AIRPORT_OPTIONS) {
+      if (item.code.startsWith(raw)) add(item, item.code === raw ? 0 : 5);
+    }
+  }
+
+  for (const [key, code] of Object.entries(LOCATION_ALIAS_TO_CODE)) {
+    const nk = normalizeText(key);
+    if (nk === nq) {
+      const o = AIRPORT_OPTIONS.find((a) => a.code === code);
+      if (o) add(o, 1);
+    } else if (nq.includes(' ') && nk.startsWith(nq)) {
+      const o = AIRPORT_OPTIONS.find((a) => a.code === code);
+      if (o) add(o, 6);
+    }
+  }
+
+  return Array.from(byCode.values())
+    .sort((a, b) => a.rank - b.rank || a.opt.label.localeCompare(b.opt.label, 'vi'))
+    .map((x) => x.opt)
+    .slice(0, 16);
 }
 
 function formatIsoDuration(duration: string) {
@@ -190,18 +269,6 @@ function normalizeOffers(payload: unknown): OfferViewModel[] {
   });
 }
 
-function filterAirportOptions(keyword: string) {
-  const q = normalizeText(keyword);
-  if (!q) return AIRPORT_OPTIONS;
-  return AIRPORT_OPTIONS.filter(
-    (item) =>
-      normalizeText(item.label).includes(q) ||
-      normalizeText(item.city).includes(q) ||
-      item.code.toLowerCase().includes(q) ||
-      (item.aliases ?? []).some((alias) => normalizeText(alias).includes(q))
-  );
-}
-
 export default function FlightsScreen() {
   const router = useRouter();
   const scheme = useColorScheme() ?? 'light';
@@ -216,10 +283,28 @@ export default function FlightsScreen() {
   const [raw, setRaw] = useState<unknown>(null);
   const [error, setError] = useState('');
   const searchCacheRef = useRef<Record<string, unknown>>({});
+  const [originFocused, setOriginFocused] = useState(false);
+  const [destinationFocused, setDestinationFocused] = useState(false);
+  const blurOriginTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const blurDestTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (blurOriginTimer.current) clearTimeout(blurOriginTimer.current);
+      if (blurDestTimer.current) clearTimeout(blurDestTimer.current);
+    };
+  }, []);
 
   const offers = useMemo(() => normalizeOffers(raw), [raw]);
-  const originOptions = useMemo(() => filterAirportOptions(originQuery), [originQuery]);
-  const destinationOptions = useMemo(() => filterAirportOptions(destinationQuery), [destinationQuery]);
+
+  const originSuggestions = useMemo(
+    () => filterAirportSuggestions(originQuery, destinationCode),
+    [originQuery, destinationCode]
+  );
+  const destinationSuggestions = useMemo(
+    () => filterAirportSuggestions(destinationQuery, originCode),
+    [destinationQuery, originCode]
+  );
 
   const originLabel = AIRPORT_OPTIONS.find((item) => item.code === originCode)?.label ?? originCode;
   const destinationLabel = AIRPORT_OPTIONS.find((item) => item.code === destinationCode)?.label ?? destinationCode;
@@ -247,13 +332,23 @@ export default function FlightsScreen() {
         (item.aliases ?? []).some((alias) => normalizeText(alias) === normalizedQuery)
     );
     if (exact) return exact.code;
+    // Không dùng .includes() trên aliases: ví dụ alias "vinh long" (Cần Thơ) chứa "vinh" → nhầm với sân bay Vinh (VII).
     const partial = AIRPORT_OPTIONS.find(
       (item) =>
-        normalizeText(item.city).includes(normalizedQuery) ||
-        normalizeText(item.label).includes(normalizedQuery) ||
-        (item.aliases ?? []).some((alias) => normalizeText(alias).includes(normalizedQuery))
+        normalizeText(item.city).includes(normalizedQuery) || normalizeText(item.label).includes(normalizedQuery)
     );
     if (partial) return partial.code;
+
+    // Alias chỉ khớp từng từ khi gõ đủ (exact), hoặc khi query có dấu cách (vd. "vinh long", "vinh l").
+    const aliasMatch = AIRPORT_OPTIONS.find((item) =>
+      (item.aliases ?? []).some((alias) => {
+        const a = normalizeText(alias);
+        if (a === normalizedQuery) return true;
+        if (!normalizedQuery.includes(' ')) return false;
+        return a.startsWith(normalizedQuery);
+      })
+    );
+    if (aliasMatch) return aliasMatch.code;
     const rawCode = query.trim().toUpperCase();
     if (/^[A-Z]{3}$/.test(rawCode)) return rawCode;
     return null;
@@ -263,11 +358,11 @@ export default function FlightsScreen() {
     const effectiveOrigin = detectCodeFromQuery(originQuery);
     const effectiveDestination = detectCodeFromQuery(destinationQuery);
     if (!effectiveOrigin) {
-      setError('Không nhận diện được điểm đi. Hãy chọn trong gợi ý hoặc nhập mã IATA.');
+      setError('Không nhận diện được điểm đi. Nhập tên thành phố hoặc mã IATA (ví dụ SGN).');
       return;
     }
     if (!effectiveDestination) {
-      setError('Không nhận diện được điểm đến. Hãy chọn trong gợi ý hoặc nhập mã IATA.');
+      setError('Không nhận diện được điểm đến. Nhập tên thành phố hoặc mã IATA (ví dụ HAN).');
       return;
     }
     if (effectiveOrigin === effectiveDestination) {
@@ -301,7 +396,7 @@ export default function FlightsScreen() {
       if (e instanceof TypeError) {
         setError(`Không kết nối được máy chủ (${API_BASE_URL}).`);
       } else {
-        setError(e instanceof Error ? e.message : 'Không thể tìm chuyến bay');
+        setError(mapFlightSearchError(e));
       }
     } finally {
       setLoading(false);
@@ -310,42 +405,109 @@ export default function FlightsScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: palette.background }]}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={[Typography.titleLG, { color: palette.text }]}>Đặt chuyến bay</Text>
 
         <Card style={styles.formCard}>
           <Text style={[Typography.bodySemi, { color: palette.text }]}>Điểm đi ({originLabel})</Text>
-          <Input value={originQuery} onChangeText={setOriginQuery} placeholder="Tìm điểm đi: Hà Nội, TP.HCM..." />
-          <View style={styles.optionsGrid}>
-            {originOptions.slice(0, 6).map((item, idx) => (
-              <Pressable
-                key={`origin-${item.code}-${idx}`}
-                onPress={() => {
-                  setOriginCode(item.code);
-                  setOriginQuery(item.city);
-                }}
-                style={[styles.optionChip, { backgroundColor: originCode === item.code ? palette.primary : palette.surfaceMuted }]}>
-                <Text style={[Typography.caption, { color: palette.text }]}>{item.label}</Text>
-              </Pressable>
-            ))}
-          </View>
+          <Input
+            value={originQuery}
+            onChangeText={setOriginQuery}
+            placeholder="Điểm đi: TP.HCM, Hà Nội hoặc mã SGN..."
+            onFocus={() => {
+              if (blurOriginTimer.current) clearTimeout(blurOriginTimer.current);
+              setDestinationFocused(false);
+              setOriginFocused(true);
+            }}
+            onBlur={() => {
+              blurOriginTimer.current = setTimeout(() => setOriginFocused(false), 280);
+            }}
+          />
+          {originFocused && originSuggestions.length > 0 ? (
+            <View {...webBlockInputBlurProps}>
+              <ScrollView
+                horizontal
+                nestedScrollEnabled
+                showsHorizontalScrollIndicator={false}
+                keyboardShouldPersistTaps="always"
+                contentContainerStyle={styles.suggestionRow}>
+                {originSuggestions.map((item) => {
+                  const selected = item.code === originCode;
+                  return (
+                    <Pressable
+                      key={`o-${item.code}`}
+                      onPress={() => {
+                        if (blurOriginTimer.current) clearTimeout(blurOriginTimer.current);
+                        setOriginQuery(item.label);
+                        setOriginCode(item.code);
+                        setOriginFocused(false);
+                      }}
+                    style={[
+                      styles.suggestionChip,
+                      {
+                        backgroundColor: selected ? palette.primary : palette.surfaceMuted,
+                        borderColor: selected ? palette.primaryPressed : palette.border,
+                      },
+                    ]}>
+                      <Text style={[Typography.caption, { color: palette.text }]} numberOfLines={1}>
+                        {item.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          ) : null}
 
           <Text style={[Typography.bodySemi, { color: palette.text }]}>Điểm đến ({destinationLabel})</Text>
-          <Input value={destinationQuery} onChangeText={setDestinationQuery} placeholder="Tìm điểm đến: Đà Nẵng, Phú Quốc..." />
-          <View style={styles.optionsGrid}>
-            {destinationOptions.slice(0, 6).map((item, idx) => (
-              <Pressable
-                key={`destination-${item.code}-${idx}`}
-                onPress={() => {
-                  setDestinationCode(item.code);
-                  setDestinationQuery(item.city);
-                }}
-                style={[styles.optionChip, { backgroundColor: destinationCode === item.code ? palette.primary : palette.surfaceMuted }]}>
-                <Text style={[Typography.caption, { color: palette.text }]}>{item.label}</Text>
-              </Pressable>
-            ))}
-          </View>
-
+          <Input
+            value={destinationQuery}
+            onChangeText={setDestinationQuery}
+            placeholder="Điểm đến: Đà Nẵng, Phú Quốc hoặc HAN..."
+            onFocus={() => {
+              if (blurDestTimer.current) clearTimeout(blurDestTimer.current);
+              setOriginFocused(false);
+              setDestinationFocused(true);
+            }}
+            onBlur={() => {
+              blurDestTimer.current = setTimeout(() => setDestinationFocused(false), 280);
+            }}
+          />
+          {destinationFocused && destinationSuggestions.length > 0 ? (
+            <View {...webBlockInputBlurProps}>
+              <ScrollView
+                horizontal
+                nestedScrollEnabled
+                showsHorizontalScrollIndicator={false}
+                keyboardShouldPersistTaps="always"
+                contentContainerStyle={styles.suggestionRow}>
+                {destinationSuggestions.map((item) => {
+                  const selected = item.code === destinationCode;
+                  return (
+                    <Pressable
+                      key={`d-${item.code}`}
+                      onPress={() => {
+                        if (blurDestTimer.current) clearTimeout(blurDestTimer.current);
+                        setDestinationQuery(item.label);
+                        setDestinationCode(item.code);
+                        setDestinationFocused(false);
+                      }}
+                    style={[
+                      styles.suggestionChip,
+                      {
+                        backgroundColor: selected ? palette.primary : palette.surfaceMuted,
+                        borderColor: selected ? palette.primaryPressed : palette.border,
+                      },
+                    ]}>
+                      <Text style={[Typography.caption, { color: palette.text }]} numberOfLines={1}>
+                        {item.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          ) : null}
           <Text style={[Typography.bodySemi, { color: palette.text }]}>Ngày bay</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dateRow}>
             {dateOptions.map((item) => {
@@ -442,15 +604,18 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
   },
   formCard: { gap: Spacing.sm },
-  optionsGrid: {
+  suggestionRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    maxHeight: 44,
   },
-  optionChip: {
+  suggestionChip: {
+    borderWidth: 1,
     borderRadius: Radius.pill,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
+    maxWidth: 200,
   },
   dateRow: { gap: Spacing.sm },
   dateChip: {

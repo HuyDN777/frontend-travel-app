@@ -10,7 +10,6 @@ import { Input } from '@/components/ui/input';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { createFlightBooking } from '@/services/api/bookings';
-import { priceFlightOffer } from '@/services/api/flights';
 import { API_BASE_URL } from '@/services/api/http';
 import { initiatePayment } from '@/services/api/payments';
 
@@ -57,30 +56,68 @@ function formatMoneyVnd(value: number) {
   }).format(value);
 }
 
-function extractOfferPrice(payload: unknown): { amount: string; currency: string } | null {
-  if (!payload || typeof payload !== 'object') return null;
-  const root = payload as Record<string, any>;
-  const data = root.data as Record<string, any> | undefined;
-  const target = Array.isArray(data) ? data[0] : data ?? root;
-  const amount = target?.total_amount ?? target?.totalAmount;
-  const currency = target?.total_currency ?? target?.currency ?? 'USD';
-  if (!amount) return null;
-  return { amount: String(amount), currency: String(currency) };
+type DuffelErr = { type?: string; code?: string; title?: string; message?: string };
+
+function tryParseDuffelBody(raw: string): { errors?: DuffelErr[] } | null {
+  const trimmed = raw.trim();
+  try {
+    return JSON.parse(trimmed) as { errors?: DuffelErr[] };
+  } catch {
+    const start = trimmed.indexOf('{');
+    const end = trimmed.lastIndexOf('}');
+    if (start === -1 || end <= start) return null;
+    try {
+      return JSON.parse(trimmed.slice(start, end + 1)) as { errors?: DuffelErr[] };
+    } catch {
+      return null;
+    }
+  }
 }
 
-function mapApiErrorMessage(rawMessage: string) {
-  try {
-    const parsed = JSON.parse(rawMessage) as {
-      errors?: Array<{ code?: string; title?: string; message?: string }>;
-    };
-    const code = parsed.errors?.[0]?.code;
-    if (code === 'offer_no_longer_available') {
-      return 'Giá vé này vừa thay đổi hoặc đã hết. Vui lòng quay lại chọn chuyến khác rồi kiểm tra giá lại.';
+/** Không hiển thị JSON thô cho người dùng — Duffel thường trả body sau tiền tố "Duffel API error 502: ". */
+function mapApiErrorMessage(rawMessage: string): string {
+  const parsed = tryParseDuffelBody(rawMessage);
+  const first = parsed?.errors?.[0];
+  if (first) {
+    const code = first.code ?? '';
+    const type = first.type ?? '';
+    if (
+      code === 'offer_no_longer_available' ||
+      type === 'offer_no_longer_available' ||
+      code === 'offer_expired' ||
+      type === 'offer_expired' ||
+      code === 'offer_request_already_booked'
+    ) {
+      return 'Giá / offer vé này đã đổi, hết hạn hoặc không còn. Quay lại màn tìm vé và chọn chuyến mới.';
     }
-  } catch {
-    // Keep original message if not JSON.
+    if (
+      code === 'airline_internal' ||
+      type === 'airline_error' ||
+      /internal.*airline|airline.*internal/i.test(first.title ?? '') ||
+      /internal_error/i.test(first.message ?? '')
+    ) {
+      return 'Hãng bay hoặc kênh đặt chỗ (Travelport) đang báo lỗi nội bộ. Thử lại sau hoặc quay lại chọn chuyến/hãng khác (sandbox hay gặp).';
+    }
+    if (code === 'validation_error' || type === 'validation_error') {
+      return 'Thông tin không hợp lệ theo yêu cầu hãng bay. Thử chọn chuyến khác hoặc liên hệ hỗ trợ.';
+    }
+    if (first.message && first.message.length < 200) {
+      return `Không thực hiện được: ${first.message}`;
+    }
   }
-  return rawMessage;
+
+  if (/Duffel API error\s*5\d\d/i.test(rawMessage)) {
+    return 'Tạm thời không kết nối được giá vé (lỗi phía hãng hoặc máy chủ trung gian). Thử lại sau hoặc chọn chuyến khác.';
+  }
+  if (/Duffel API error\s*4\d\d/i.test(rawMessage)) {
+    return 'Yêu cầu không được chấp nhận (vé có thể đã đổi giá hoặc hết chỗ). Quay lại tìm chuyến.';
+  }
+
+  if (rawMessage.length > 240 && /"errors"\s*:\s*\[/i.test(rawMessage)) {
+    return 'Có lỗi từ hệ thống đặt vé. Vui lòng thử lại sau hoặc chọn chuyến khác.';
+  }
+
+  return rawMessage.length > 500 ? `${rawMessage.slice(0, 200)}…` : rawMessage;
 }
 
 export default function FlightCheckoutScreen() {
@@ -115,16 +152,13 @@ export default function FlightCheckoutScreen() {
     insurance: false,
   });
   const [paymentProvider, setPaymentProvider] = useState<'VNPAY' | 'MOMO'>('VNPAY');
-  const [pricingLoading, setPricingLoading] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
-  const [verifiedPrice, setVerifiedPrice] = useState<{ amount: string; currency: string } | null>(null);
   const [error, setError] = useState('');
   const [offerExpired, setOfferExpired] = useState(false);
 
   const baseAmount = useMemo(
-    () =>
-      toVndAmount(verifiedPrice?.amount ?? params.amount ?? '0', verifiedPrice?.currency ?? params.currency ?? 'VND'),
-    [params.amount, params.currency, verifiedPrice]
+    () => toVndAmount(params.amount ?? '0', params.currency ?? 'VND'),
+    [params.amount, params.currency]
   );
   const finalAmount = useMemo(
     () => baseAmount + BAGGAGE_PRICE_VND[extras.baggageKg] + (extras.insurance ? INSURANCE_PRICE_VND : 0),
@@ -140,35 +174,6 @@ export default function FlightCheckoutScreen() {
     return '';
   };
 
-  const handleRecheckPrice = async () => {
-    if (!params.offerId) return;
-    const validationError = validatePassenger();
-    if (validationError) {
-      setError(validationError);
-      return;
-    }
-    try {
-      setPricingLoading(true);
-      setError('');
-      setOfferExpired(false);
-      const repriced = await priceFlightOffer({ id: params.offerId });
-      const extracted = extractOfferPrice(repriced);
-      if (!extracted) {
-        setError('Không đọc được giá mới từ hệ thống.');
-        return;
-      }
-      setVerifiedPrice(extracted);
-    } catch (e) {
-      const message = e instanceof Error ? mapApiErrorMessage(e.message) : 'Không thể kiểm tra lại giá.';
-      setError(message);
-      if (message.includes('đã hết') || message.includes('không còn')) {
-        setOfferExpired(true);
-      }
-    } finally {
-      setPricingLoading(false);
-    }
-  };
-
   const toTimeOnly = (dateTime?: string) => {
     if (!dateTime) return '00:00:00';
     const date = new Date(dateTime);
@@ -177,8 +182,13 @@ export default function FlightCheckoutScreen() {
   };
 
   const handlePay = async () => {
-    if (!verifiedPrice) {
-      setError('Vui lòng kiểm tra lại giá trước khi thanh toán.');
+    const validationError = validatePassenger();
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    if (!params.amount || !Number.isFinite(Number(params.amount)) || Number(params.amount) <= 0) {
+      setError('Thiếu giá vé từ bước tìm chuyến. Vui lòng quay lại chọn vé.');
       return;
     }
     try {
@@ -293,10 +303,9 @@ export default function FlightCheckoutScreen() {
 
         <Card style={styles.section}>
           <Text style={[Typography.bodySemi, { color: palette.text }]}>Tổng thanh toán: {formatMoneyVnd(finalAmount)}</Text>
-          <Button title={pricingLoading ? 'Đang kiểm tra giá...' : 'Kiểm tra lại giá'} onPress={handleRecheckPrice} loading={pricingLoading} variant="secondary" />
-          {verifiedPrice ? (
-            <Text style={[Typography.caption, { color: palette.success }]}>Đã kiểm tra giá thành công.</Text>
-          ) : null}
+          <Text style={[Typography.caption, { color: palette.textMuted }]}>
+            Giá vé lấy từ kết quả tìm chuyến; phụ phí hành lý / bảo hiểm cộng thêm bên dưới.
+          </Text>
           <View style={styles.row}>
             <Pressable onPress={() => setPaymentProvider('VNPAY')} style={[styles.chip, { backgroundColor: paymentProvider === 'VNPAY' ? palette.primary : palette.surfaceMuted }]}>
               <Text style={[Typography.caption, { color: palette.text }]}>VNPay</Text>
@@ -305,11 +314,15 @@ export default function FlightCheckoutScreen() {
               <Text style={[Typography.caption, { color: palette.text }]}>MoMo</Text>
             </Pressable>
           </View>
-          {error ? <Text style={[Typography.caption, { color: palette.danger }]}>{error}</Text> : null}
+          {error ? (
+            <Text style={[Typography.body, { color: palette.danger, lineHeight: 22 }]} selectable>
+              {error}
+            </Text>
+          ) : null}
           {offerExpired ? (
             <Button title="Quay lại chọn chuyến khác" variant="ghost" onPress={() => router.back()} />
           ) : null}
-          <Button title={checkoutLoading ? 'Đang tạo thanh toán...' : 'Tiếp tục thanh toán'} onPress={handlePay} loading={checkoutLoading} disabled={!verifiedPrice} />
+          <Button title={checkoutLoading ? 'Đang tạo thanh toán...' : 'Tiếp tục thanh toán'} onPress={handlePay} loading={checkoutLoading} />
         </Card>
       </ScrollView>
     </View>

@@ -13,7 +13,7 @@ const destinations = [
     title: 'Hà Nội',
     subtitle: 'Phố cổ & ẩm thực đường phố',
     image:
-      'https://images.unsplash.com/photo-1583417319070-4a69db38a482?auto=format&fit=crop&w=900&q=80',
+      'https://images.unsplash.com/photo-1509030450996-93f2e3d54238?auto=format&fit=crop&w=900&q=80',
   },
   {
     id: 'danang',
@@ -42,20 +42,11 @@ export default function HomeScreen() {
               style={[styles.avatar, { borderColor: palette.border }]}
             />
             <View>
-              <Text style={[Typography.caption, { color: palette.textMuted }]}>Xin chào,</Text>
-              <Text style={[Typography.titleLG, { color: palette.text }]}>Xin chào bạn</Text>
+              <Text style={[Typography.caption, { color: palette.textMuted }]}>Chào mừng</Text>
+              <Text style={[Typography.titleLG, { color: palette.text }]}>Bạn đồng hành</Text>
             </View>
           </View>
         </View>
-
-        <Card style={styles.scopeCard}>
-          <Text style={[Typography.caption, { color: palette.accent, fontWeight: '700' }]}>
-            Phạm vi đồ án
-          </Text>
-          <Text style={[Typography.body, { color: palette.textMuted, marginTop: Spacing.xs }]}>
-            Mục 4: gợi ý lịch AI; đặt chuyến bay và thanh toán test qua app.
-          </Text>
-        </Card>
 
         <View style={[styles.search, { backgroundColor: palette.surface, borderColor: palette.border }]}>
           <Ionicons name="search-outline" size={18} color={palette.textMuted} />
@@ -160,9 +151,6 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 999,
     borderWidth: 1,
-  },
-  scopeCard: {
-    paddingVertical: Spacing.lg,
   },
   search: {
     flexDirection: 'row',
