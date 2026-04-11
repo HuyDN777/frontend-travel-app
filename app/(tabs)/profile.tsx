@@ -1,8 +1,9 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -21,7 +22,7 @@ import {
   type UserProfile,
 } from '@/utils/api';
 import { moderateScale } from '@/utils/responsive';
-import { clearSessionUser, getSessionUserId } from '@/utils/session';
+import { getSessionUser, getSessionUserId } from '@/utils/session';
 
 export default function ProfileScreen() {
   const scheme = useColorScheme() ?? 'light';
@@ -33,33 +34,40 @@ export default function ProfileScreen() {
   const [trips, setTrips] = useState<TripItem[]>([]);
   const [savedPosts, setSavedPosts] = useState<CommunityPost[]>([]);
   const [loading, setLoading] = useState(false);
+  const isAdmin = (getSessionUser()?.role ?? '').toUpperCase() === 'ADMIN';
 
   const displayName = useMemo(() => profile?.fullName || 'Hello Traveler', [profile]);
   const displayHandle = useMemo(() => profile?.username ? `@${profile.username}` : '@traveler', [profile]);
 
-  useEffect(() => {
-    (async () => {
-      const userId = getSessionUserId();
-      if (!userId) {
-        router.replace('/login');
-        return;
-      }
+  async function loadProfileAndTrips() {
+    const userId = getSessionUserId();
+    if (!userId) {
+      router.replace('/login');
+      return;
+    }
 
-      try {
-        setLoading(true);
-        const [me, myTrips] = await Promise.all([
-          getMyProfile(userId),
-          getMyTrips(userId),
-        ]);
-        setProfile(me);
-        setTrips(myTrips);
-      } catch (error: any) {
-        Alert.alert('Error', error?.message ?? 'Khong tai duoc profile');
-      } finally {
-        setLoading(false);
-      }
-    })();
+    try {
+      setLoading(true);
+      const [me, myTrips] = await Promise.all([getMyProfile(userId), getMyTrips(userId)]);
+      setProfile(me);
+      setTrips(myTrips);
+    } catch (error: any) {
+      Alert.alert('Error', error?.message ?? 'Khong tai duoc profile');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadProfileAndTrips();
   }, []);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      void loadProfileAndTrips();
+      return undefined;
+    }, [])
+  );
 
   useEffect(() => {
     if (activeTab !== 'saved') return;
@@ -99,6 +107,15 @@ export default function ProfileScreen() {
     }
   }
 
+  async function handleShare(post: CommunityPost) {
+    try {
+      const message = [post.title, post.content, post.location].filter(Boolean).join('\n');
+      await Share.share({ message: message || 'Xem bai viet du lich nay nhe!' });
+    } catch {
+      Alert.alert('Error', 'Khong the chia se bai viet');
+    }
+  }
+
   return (
     <ThemedView style={styles.root}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -116,14 +133,7 @@ export default function ProfileScreen() {
 
           <View style={styles.headerBtnGroup}>
             <Button title="Edit Profile" variant="secondary" onPress={() => router.push('/edit-profile')} />
-            <Button
-              title="Log Out"
-              variant="ghost"
-              onPress={() => {
-                clearSessionUser();
-                router.replace('/login');
-              }}
-            />
+            {isAdmin ? <Button title="Admin Panel" variant="ghost" onPress={() => router.push('/admin-panel' as any)} /> : null}
           </View>
         </View>
 
@@ -177,6 +187,7 @@ export default function ProfileScreen() {
                 canEdit={false}
                 onLike={() => {}}
                 onSave={() => handleUnsave(post.id)}
+                onShare={() => void handleShare(post)}
                 onEdit={() => {}}
                 onDelete={() => {}}
               />

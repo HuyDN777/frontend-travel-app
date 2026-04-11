@@ -1,11 +1,15 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
+import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
+import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { Card } from '@/components/ui/card';
 import { Colors, Elevation, Radius, Spacing, Typography } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { getMyProfile, type UserProfile } from '@/utils/api';
+import { getSessionUser, getSessionUserId } from '@/utils/session';
 
 const destinations = [
   {
@@ -31,6 +35,33 @@ export default function HomeScreen() {
   const router = useRouter();
   const scheme = useColorScheme() ?? 'light';
   const palette = Colors[scheme];
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      const userId = getSessionUserId();
+      if (!userId) return undefined;
+
+      let active = true;
+      (async () => {
+        try {
+          const me = await getMyProfile(userId);
+          if (!active) return;
+          setProfile(me);
+        } catch {
+          // keep fallback session values
+        }
+      })();
+
+      return () => {
+        active = false;
+      };
+    }, [])
+  );
+
+  const session = getSessionUser();
+  const avatar = profile?.avatarUrl || session?.avatarUrl || 'https://i.pravatar.cc/100?img=12';
+  const displayName = profile?.fullName || session?.fullName || 'Bạn đồng hành';
 
   return (
     <View style={[styles.root, { backgroundColor: palette.background }]}>
@@ -38,12 +69,12 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <Image
-              source={{ uri: 'https://i.pravatar.cc/100?img=12' }}
+              source={{ uri: avatar }}
               style={[styles.avatar, { borderColor: palette.border }]}
             />
             <View>
               <Text style={[Typography.caption, { color: palette.textMuted }]}>Chào mừng</Text>
-              <Text style={[Typography.titleLG, { color: palette.text }]}>Bạn đồng hành</Text>
+              <Text style={[Typography.titleLG, { color: palette.text }]}>{displayName}</Text>
             </View>
           </View>
         </View>
