@@ -100,16 +100,16 @@ function mapFlightSearchError(e: unknown): string {
 }
 
 /** Web: chặn mất focus ô nhập trước khi chip nhận click (nếu không, blur ẩn list và onPress không chạy). */
-function preventWebAutocompleteBlur(e: { preventDefault?: () => void; nativeEvent?: { preventDefault?: () => void } }) {
+function preventWebAutocompleteBlur(e: any) {
   if (Platform.OS !== 'web') return;
   e.preventDefault?.();
   e.nativeEvent?.preventDefault?.();
 }
 
-const webBlockInputBlurProps =
+const webBlockInputBlurProps: any =
   Platform.OS === 'web'
     ? ({
-        onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault(),
+        onMouseDown: (e: any) => e.preventDefault(),
         onPointerDown: preventWebAutocompleteBlur,
         onPointerDownCapture: preventWebAutocompleteBlur,
       } as const)
