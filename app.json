@@ -38,12 +38,14 @@
             "backgroundColor": "#000000"
           }
         }
-      ],
-      "@react-native-community/datetimepicker"
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "aiItineraryUrl": "http://localhost:8081/api/v1/ai/itinerary"
     }
   }
 }
