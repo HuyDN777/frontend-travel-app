@@ -1,14 +1,20 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Tabs } from 'expo-router';
+import { Redirect, Tabs } from 'expo-router';
 import React from 'react';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { getSessionUser } from '@/utils/session';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const palette = Colors[colorScheme ?? 'light'];
+  const role = (getSessionUser()?.role ?? '').toUpperCase();
+
+  if (role === 'ADMIN') {
+    return <Redirect href="/admin-panel" />;
+  }
 
   return (
     <Tabs

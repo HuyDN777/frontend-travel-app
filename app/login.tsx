@@ -41,7 +41,11 @@ export default function LoginScreen() {
         avatarUrl: auth.avatarUrl,
         role: auth.role,
       });
-      router.replace('/(tabs)');
+      if ((auth.role ?? '').toUpperCase() === 'ADMIN') {
+        router.replace('/admin-panel');
+      } else {
+        router.replace('/(tabs)');
+      }
     } catch (error: any) {
       Alert.alert('Đăng nhập thất bại', error?.message ?? 'Sai thông tin hoặc máy chủ không phản hồi.');
     } finally {

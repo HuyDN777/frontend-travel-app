@@ -10,10 +10,10 @@ export const unstable_settings = {
 };
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
+  useColorScheme();
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <ThemeProvider value={DefaultTheme}>
       <Stack>
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
@@ -22,6 +22,7 @@ export default function RootLayout() {
         <Stack.Screen name="ai-itinerary" options={{ title: 'Chatbot lịch trình AI' }} />
         <Stack.Screen name="community-post-editor" options={{ headerShown: false }} />
         <Stack.Screen name="edit-profile" options={{ headerShown: false }} />
+        <Stack.Screen name="admin-panel" options={{ headerShown: false }} />
         <Stack.Screen name="flights" options={{ title: 'Chuyến bay', presentation: 'card' }} />
         <Stack.Screen name="flight-checkout" options={{ title: 'Xác nhận & thanh toán', presentation: 'card' }} />
         <Stack.Screen name="my-tickets" options={{ title: 'Vé của tôi', presentation: 'card' }} />
