@@ -1,6 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import * as FileSystem from 'expo-file-system/legacy';
+// eslint-disable-next-line import/no-unresolved -- expo-media-library is a declared dependency; resolver may not resolve Expo packages
 import * as MediaLibrary from 'expo-media-library';
 import React, { useMemo, useRef, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';

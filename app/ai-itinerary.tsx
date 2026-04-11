@@ -1116,10 +1116,9 @@ export default function AiItineraryScreen() {
             {editTarget?.description ? (
               <View style={{ marginTop: Spacing.md }}>
                 <Text style={[Typography.caption, { color: palette.textMuted }]}>Thông tin địa điểm (AI)</Text>
-                <Text 
-                  style={[Typography.body, { color: palette.text, marginTop: 4, fontStyle: 'italic', opacity: 0.8 }]}
-                >
-                  "{editTarget.description}"
+                <Text
+                  style={[Typography.body, { color: palette.text, marginTop: 4, fontStyle: 'italic', opacity: 0.8 }]}>
+                  {`"${editTarget.description}"`}
                 </Text>
               </View>
             ) : null}
