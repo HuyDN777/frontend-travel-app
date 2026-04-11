@@ -36,6 +36,7 @@ export default function CommunityPostEditorScreen() {
   const [location, setLocation] = useState('');
   const [budget, setBudget] = useState('');
   const [loading, setLoading] = useState(false);
+  const budgetHint = useMemo(() => 'Nhap so tien theo VND, co the de trong neu khong muon set.', []);
 
   useEffect(() => {
     if (!getSessionUserId()) {
@@ -69,14 +70,18 @@ export default function CommunityPostEditorScreen() {
     };
   }, [isEdit, postId]);
 
-  async function handlePickImage() {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  async function handlePickImage(fromCamera: boolean) {
+    const permission = fromCamera
+      ? await ImagePicker.requestCameraPermissionsAsync()
+      : await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Permission', 'Can cap quyen thu vien anh de chon anh');
+      Alert.alert('Permission', fromCamera ? 'Can cap quyen camera de chup anh' : 'Can cap quyen thu vien anh de chon anh');
       return;
     }
 
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7, base64: false });
+    const result = fromCamera
+      ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.8, base64: false })
+      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8, base64: false });
 
     if (result.canceled) return;
 
@@ -141,6 +146,11 @@ export default function CommunityPostEditorScreen() {
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Card style={styles.form}>
+          <View style={styles.heroBlock}>
+            <ThemedText type="defaultSemiBold">{isEdit ? 'Update your moment' : 'Share your travel moment'}</ThemedText>
+            <ThemedText style={[styles.helperText, { color: palette.textMuted }]}>Chup anh hoac lay tu dien thoai, budget co the bo trong.</ThemedText>
+          </View>
+
           <Input placeholder="Title" value={title} onChangeText={setTitle} />
           <Input
             placeholder="Share your travel moments..."
@@ -154,14 +164,26 @@ export default function CommunityPostEditorScreen() {
             <Image source={{ uri: pickedImageUri || imageUrl }} style={styles.imagePreview} contentFit="cover" />
           ) : null}
 
-          <Button
-            title={pickedImageUri || imageUrl ? 'Chon anh khac tu dien thoai' : 'Chon anh tu dien thoai'}
-            variant="secondary"
-            onPress={handlePickImage}
-          />
+          <View style={styles.imageActions}>
+            <Button
+              title={pickedImageUri || imageUrl ? 'Doi anh' : 'Chon anh'}
+              variant="secondary"
+              style={styles.flexBtn}
+              onPress={() => handlePickImage(false)}
+            />
+            <Button
+              title="Chup anh"
+              variant="secondary"
+              style={styles.flexBtn}
+              onPress={() => handlePickImage(true)}
+            />
+          </View>
 
           <Input placeholder="Location" value={location} onChangeText={setLocation} />
-          <Input placeholder="Budget (optional)" value={budget} onChangeText={setBudget} keyboardType="numeric" />
+          <View style={styles.budgetBlock}>
+            <Input placeholder="Budget (VND, optional)" value={budget} onChangeText={setBudget} keyboardType="numeric" />
+            <ThemedText style={[styles.helperText, { color: palette.textMuted }]}>{budgetHint}</ThemedText>
+          </View>
 
           <Button title={isEdit ? 'Save changes' : 'Create post'} size="lg" onPress={handleSubmit} loading={loading} />
         </Card>
@@ -190,6 +212,13 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
     borderRadius: Radius.xl,
   },
+  heroBlock: {
+    gap: Spacing.xs,
+  },
+  helperText: {
+    fontSize: moderateScale(13),
+    lineHeight: moderateScale(18),
+  },
   multiline: {
     minHeight: moderateScale(120),
     alignItems: 'flex-start',
@@ -198,5 +227,15 @@ const styles = StyleSheet.create({
     width: '100%',
     height: moderateScale(190),
     borderRadius: Radius.lg,
+  },
+  imageActions: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  flexBtn: {
+    flex: 1,
+  },
+  budgetBlock: {
+    gap: Spacing.xs,
   },
 });
