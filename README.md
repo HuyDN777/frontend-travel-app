@@ -1,50 +1,83 @@
-# Welcome to your Expo app 👋
+# Ứng dụng du lịch (Travel App) — Frontend
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+**Phạm vi đồ án: chỉ mục 4 — “Nhờ AI gợi ý lịch trình nhanh”.** Các màn hình khác (đăng ký, booking, bản đồ…) không nằm trong phần này.
 
-## Get started
+Repository: **React Native + Expo**. Backend tùy chọn: **Spring Boot + MySQL** (API gợi ý lịch).
 
-1. Install dependencies
+## Mục tiêu nghiệp vụ (UC-04)
 
-   ```bash
-   npm install
-   ```
+Giao diện **chatbot** (mục 4) cho phép:
 
-2. Start the app
+1. **Hội thoại** thu **điểm đến**, **số ngày**, **sở thích**, **ngân sách tham khảo**, (tuỳ chọn) **ngày bắt đầu** — có nút gợi ý nhanh và ô nhập.
+2. Sau khi **xác nhận tóm tắt**, gửi yêu cầu tới **dịch vụ AI** (Spring Boot) hoặc **bản demo** nếu chưa cấu hình URL.
+3. Nhận lịch **theo từng ngày**: điểm thăm, thời gian ước tính, **nhà hàng**.
+4. **Duyệt / chỉnh sửa** từng hoạt động, **áp dụng** thành **DayPlan nháp** (`planDraftStore`).
 
-   ```bash
-   npx expo start
-   ```
+## Kiến trúc tổng thể
 
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```mermaid
+flowchart LR
+  subgraph client [React Native Expo]
+    UI[Màn hình AI itinerary]
+    SVC[aiItineraryService]
+    ST[planDraftStore]
+    UI --> SVC
+    UI --> ST
+  end
+  subgraph server [Spring Boot]
+    API["POST /api/v1/ai/itinerary"]
+    AI[AI / rule engine]
+    API --> AI
+  end
+  DB[(MySQL)]
+  server --> DB
+  SVC -->|"JSON + EXPO_PUBLIC_AI_ITINERARY_URL"| API
+  SVC -->|"Không URL: mock local"| SVC
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## Công nghệ
 
-## Learn more
+| Lớp | Công nghệ |
+|-----|-----------|
+| Frontend | React Native 0.81, Expo SDK 54, Expo Router, TypeScript |
+| UI | Component tái sử dụng (`Button`, `Card`, `Input`), theme sáng/tối |
+| Backend (tham chiếu báo cáo) | Spring Boot REST, MySQL |
 
-To learn more about developing your project with Expo, look at the following resources:
+## Cấu trúc thư mục (phần liên quan BTL)
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+```
+app/
+  ai-itinerary.tsx      # Luồng UC: gợi ý AI → duyệt → áp dụng DayPlan
+  (tabs)/index.tsx      # Điều hướng vào màn AI
+services/
+  aiItineraryService.ts # Gọi API hoặc mock có cùng contract JSON
+types/
+  aiItinerary.ts        # Request/Response & DayPlan (khớp backend)
+stores/
+  planDraftStore.ts     # Lưu tạm DayPlan sau khi người dùng xác nhận
+```
 
-## Join the community
+## Cài đặt và chạy
 
-Join our community of developers creating universal apps.
+```bash
+npm install
+npx expo start
+```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Mở bằng Expo Go, emulator hoặc `w` cho web. Trên **Trang chủ**, chọn **“Gợi ý lịch trình bằng AI”** hoặc nút **sparkles** bên phải.
+
+## Tích hợp Spring Boot
+
+1. Sao chép `.env.example` thành `.env` và điền URL endpoint (ví dụ `http://10.0.2.2:8080/api/v1/ai/itinerary` khi emulator Android trỏ tới máy host).
+2. Hoặc trong `app.json` → `expo.extra.aiItineraryUrl`.
+3. Backend trả về JSON đúng schema trong `types/aiItinerary.ts` (xem thêm **`BAO_CAO_PHAN_4.md`**).
+
+Nếu **không** đặt URL, app tự dùng **mock** để demo và quay video báo cáo.
+
+## Tài liệu kèm báo cáo
+
+- **`BAO_CAO_PHAN_4.md`**: Mô tả chi tiết use case, luồng xử lý, contract API, gợi ý chụp màn hình / checklist nộp bài.
+
+## License
+
+Dự án học tập — điều chỉnh theo yêu cầu giảng viên.
