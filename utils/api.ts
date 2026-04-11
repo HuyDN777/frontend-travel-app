@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import * as ImageManipulator from 'expo-image-manipulator';
 
 import { getSessionUserId } from '@/utils/session';
 
@@ -136,9 +137,13 @@ export type CommunityPost = {
   title: string;
   content: string;
   imageUrl: string | null;
+  imageUrls?: string[];
   location: string | null;
   budget: number | null;
   createdAt: string;
+  authorUsername?: string | null;
+  authorFullName?: string | null;
+  authorAvatarUrl?: string | null;
   likeCount: number;
   saveCount: number;
   isLiked: number;
@@ -150,12 +155,18 @@ export type CommunityPostPayload = {
   title: string;
   content?: string;
   imageUrl?: string;
+  imageUrls?: string[];
   location?: string;
   budget?: number | null;
 };
 
 export type UploadImageRes = {
   imageUrl: string;
+};
+
+export type AdminDashboardRes = {
+  users: UserProfile[];
+  posts: CommunityPost[];
 };
 
 export async function register(payload: RegisterPayload) {
@@ -176,7 +187,10 @@ export async function getMyProfile(userId?: number) {
   return request<UserProfile>('/api/v1/users/me', { userId, method: 'GET' });
 }
 
-export async function updateMyProfile(payload: Partial<UserProfile> & { password?: string }, userId?: number) {
+export async function updateMyProfile(
+  payload: Partial<UserProfile> & { password?: string; currentPassword?: string },
+  userId?: number
+) {
   const resolvedUserId = resolveUserId(userId);
   if (typeof resolvedUserId !== 'number') {
     throw new Error('Not logged in');
@@ -186,6 +200,30 @@ export async function updateMyProfile(payload: Partial<UserProfile> & { password
     userId: resolvedUserId,
     method: 'PUT',
     body: JSON.stringify(payload),
+  });
+}
+
+export async function uploadAvatar(fileUri: string, userId?: number) {
+  const resolvedUserId = resolveUserId(userId);
+  if (typeof resolvedUserId !== 'number') {
+    throw new Error('Not logged in');
+  }
+
+  const fileName = fileUri.split('/').pop() ?? `avatar-${Date.now()}.jpg`;
+  const lowerName = fileName.toLowerCase();
+  const mimeType = lowerName.endsWith('.png') ? 'image/png' : 'image/jpeg';
+
+  const formData = new FormData();
+  formData.append('image', {
+    uri: fileUri,
+    name: fileName,
+    type: mimeType,
+  } as any);
+
+  return request<{ avatarUrl: string }>(`/api/v1/users/${resolvedUserId}/avatar`, {
+    userId: resolvedUserId,
+    method: 'POST',
+    body: formData,
   });
 }
 
@@ -242,13 +280,24 @@ export async function uploadCommunityImage(fileUri: string, userId?: number) {
     throw new Error('Not logged in');
   }
 
-  const fileName = fileUri.split('/').pop() ?? `image-${Date.now()}.jpg`;
-  const lowerName = fileName.toLowerCase();
-  const mimeType = lowerName.endsWith('.png') ? 'image/png' : 'image/jpeg';
+  let uploadUri = fileUri;
+  try {
+    const manipulated = await ImageManipulator.manipulateAsync(
+      fileUri,
+      [{ resize: { width: 1440 } }],
+      { compress: 0.72, format: ImageManipulator.SaveFormat.JPEG }
+    );
+    uploadUri = manipulated.uri;
+  } catch {
+    // Keep original URI if preprocessing fails.
+  }
+
+  const fileName = uploadUri.split('/').pop() ?? `image-${Date.now()}.jpg`;
+  const mimeType = 'image/jpeg';
 
   const formData = new FormData();
   formData.append('image', {
-    uri: fileUri,
+    uri: uploadUri,
     name: fileName,
     type: mimeType,
   } as any);
@@ -258,6 +307,38 @@ export async function uploadCommunityImage(fileUri: string, userId?: number) {
     method: 'POST',
     body: formData,
   });
+}
+
+export async function uploadCommunityImages(fileUris: string[], userId?: number) {
+  const imageUrls: string[] = [];
+
+  for (let i = 0; i < fileUris.length; i += 1) {
+    const uri = fileUris[i];
+    try {
+      let uploaded: UploadImageRes | null = null;
+      let lastError: unknown;
+
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
+        try {
+          uploaded = await uploadCommunityImage(uri, userId);
+          break;
+        } catch (error) {
+          lastError = error;
+        }
+      }
+
+      if (!uploaded) {
+        throw lastError;
+      }
+
+      imageUrls.push(uploaded.imageUrl);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Upload image failed';
+      throw new Error(`Khong the upload anh thu ${i + 1}: ${message}`);
+    }
+  }
+
+  return imageUrls;
 }
 
 export async function updateCommunityPost(postId: number, payload: CommunityPostPayload, userId?: number) {
@@ -286,5 +367,33 @@ export async function toggleSave(postId: number, userId?: number) {
   return request('/api/v2/community/posts/' + postId + '/saves/toggle', {
     userId,
     method: 'POST',
+  });
+}
+
+export async function getAdminUsers(userId?: number) {
+  const resolvedUserId = resolveUserId(userId);
+  if (typeof resolvedUserId !== 'number') {
+    throw new Error('Not logged in');
+  }
+  return request<UserProfile[]>('/api/v1/admin/users', {
+    userId: resolvedUserId,
+    method: 'GET',
+  });
+}
+
+export async function getAdminDashboard(userId?: number): Promise<AdminDashboardRes> {
+  const [users, posts] = await Promise.all([getAdminUsers(userId), getCommunityFeed(userId)]);
+  return { users, posts };
+}
+
+export async function updateAdminUserRole(targetUserId: number, role: 'USER' | 'ADMIN', userId?: number) {
+  const resolvedUserId = resolveUserId(userId);
+  if (typeof resolvedUserId !== 'number') {
+    throw new Error('Not logged in');
+  }
+  return request<UserProfile>(`/api/v1/admin/users/${targetUserId}/role`, {
+    userId: resolvedUserId,
+    method: 'PATCH',
+    body: JSON.stringify({ role }),
   });
 }
