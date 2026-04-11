@@ -1,11 +1,12 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, RefreshControl, ScrollView, Share, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { CommunityPostCard } from '@/components/ui/community-post-card';
+import { Input } from '@/components/ui/input';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
@@ -24,8 +25,17 @@ export default function CommunityScreen() {
   const router = useRouter();
 
   const [posts, setPosts] = useState<CommunityPost[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  const filteredPosts = posts.filter((post) => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return true;
+    return [post.title, post.content, post.location, post.authorFullName, post.authorUsername]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(q));
+  });
 
   const loadFeed = useCallback(async () => {
     const userId = getSessionUserId();
@@ -101,6 +111,15 @@ export default function CommunityScreen() {
     }
   }
 
+  async function handleShare(post: CommunityPost) {
+    try {
+      const message = [post.title, post.content, post.location].filter(Boolean).join('\n');
+      await Share.share({ message: message || 'Xem bai viet du lich nay nhe!' });
+    } catch {
+      Alert.alert('Lỗi', 'Không thể chia sẻ lúc này');
+    }
+  }
+
   function handleEdit(postId: number) {
     router.push({ pathname: '/community-post-editor', params: { postId: String(postId) } });
   }
@@ -157,19 +176,27 @@ export default function CommunityScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void handleRefresh()} />}
       >
-        {posts.map((post) => (
+        <Input
+          placeholder="Tim bai viet, dia diem, tac gia..."
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          autoCapitalize="none"
+        />
+
+        {filteredPosts.map((post) => (
           <CommunityPostCard
             key={post.id}
             post={post}
             canEdit={post.userId === getSessionUserId()}
             onLike={() => void handleLike(post.id)}
             onSave={() => void handleSave(post.id)}
+            onShare={() => void handleShare(post)}
             onEdit={() => handleEdit(post.id)}
             onDelete={() => void handleDelete(post.id)}
           />
         ))}
 
-        {!loading && posts.length === 0 ? (
+        {!loading && filteredPosts.length === 0 ? (
           <ThemedText style={[styles.emptyText, { color: palette.textMuted }]}>Chưa có bài viết nào.</ThemedText>
         ) : null}
       </ScrollView>
