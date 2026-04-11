@@ -8,13 +8,17 @@ import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Radius, Spacing } from '@/constants/theme';
+import { SocialOAuthButton } from '@/components/ui/social-oauth-button';
+import { Colors, Radius, Spacing } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { register } from '@/utils/api';
 import { moderateScale } from '@/utils/responsive';
 import { setSessionUser } from '@/utils/session';
 
 export default function SignUpScreen() {
   const router = useRouter();
+  const scheme = useColorScheme() ?? 'light';
+  const palette = Colors[scheme];
 
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
@@ -25,11 +29,11 @@ export default function SignUpScreen() {
 
   async function handleSignUp() {
     if (!fullName.trim() || !username.trim() || !email.trim() || !password.trim()) {
-      Alert.alert('Validation', 'Please fill all required fields');
+      Alert.alert('Thiếu thông tin', 'Vui lòng điền đầy đủ các ô bắt buộc.');
       return;
     }
     if (password !== confirmPassword) {
-      Alert.alert('Validation', 'Confirm password does not match');
+      Alert.alert('Mật khẩu', 'Mật khẩu xác nhận không khớp.');
       return;
     }
 
@@ -51,7 +55,7 @@ export default function SignUpScreen() {
       });
       router.replace('/(tabs)');
     } catch (error: any) {
-      Alert.alert('Sign up failed', error?.message ?? 'Unable to create account');
+      Alert.alert('Đăng ký thất bại', error?.message ?? 'Không tạo được tài khoản.');
     } finally {
       setLoading(false);
     }
@@ -69,24 +73,47 @@ export default function SignUpScreen() {
         </Card>
 
         <View style={styles.form}>
-          <ThemedText type="title" style={styles.title}>Create an Account</ThemedText>
-          <ThemedText>Start your journey today</ThemedText>
+          <ThemedText type="title" style={styles.title}>
+            Tạo tài khoản
+          </ThemedText>
+          <ThemedText style={{ color: palette.textMuted }}>Bắt đầu hành trình của bạn hôm nay</ThemedText>
 
-          <Input placeholder="Full Name" value={fullName} onChangeText={setFullName} />
-          <Input placeholder="Username" value={username} onChangeText={setUsername} autoCapitalize="none" />
-          <Input placeholder="Email Address" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
-          <Input placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry />
-          <Input placeholder="Confirm Password" value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry />
+          <Input placeholder="Họ và tên" value={fullName} onChangeText={setFullName} />
+          <Input placeholder="Tên đăng nhập" value={username} onChangeText={setUsername} autoCapitalize="none" />
+          <Input
+            placeholder="Email"
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
+          <Input placeholder="Mật khẩu" value={password} onChangeText={setPassword} secureTextEntry />
+          <Input
+            placeholder="Xác nhận mật khẩu"
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            secureTextEntry
+          />
 
-          <Button title="Sign Up" size="lg" onPress={handleSignUp} loading={loading} />
+          <Button title="Đăng ký" size="lg" onPress={handleSignUp} loading={loading} />
 
           <View style={styles.socialRow}>
-            <Button title="Google" variant="secondary" style={styles.socialBtn} />
-            <Button title="Apple" variant="secondary" style={styles.socialBtn} />
+            <SocialOAuthButton
+              provider="google"
+              label="Google"
+              onPress={() => Alert.alert('Thông báo', 'Đăng ký bằng Google sẽ được bổ sung sau.')}
+            />
+            <SocialOAuthButton
+              provider="apple"
+              label="Apple"
+              onPress={() => Alert.alert('Thông báo', 'Đăng ký bằng Apple sẽ được bổ sung sau.')}
+            />
           </View>
 
           <Pressable onPress={() => router.replace('/login')}>
-            <ThemedText style={styles.switchText}>Already have an account? Log in</ThemedText>
+            <ThemedText style={[styles.switchText, { color: palette.primary }]}>
+              Đã có tài khoản? Đăng nhập
+            </ThemedText>
           </Pressable>
         </View>
       </ScrollView>
@@ -118,9 +145,6 @@ const styles = StyleSheet.create({
   socialRow: {
     flexDirection: 'row',
     gap: Spacing.md,
-  },
-  socialBtn: {
-    flex: 1,
   },
   switchText: {
     textAlign: 'center',

@@ -1,6 +1,36 @@
+import Constants from 'expo-constants';
+
 import { getSessionUserId } from '@/utils/session';
 
-export const API_BASE_URL = 'http://192.168.1.105:8080';
+/**
+ * Chỉ gốc server (không có /api/v1) vì các path trong file này đã bắt đầu bằng /api/...
+ */
+function resolveApiOrigin(): string {
+  const envValue = process.env.EXPO_PUBLIC_API_URL?.trim();
+  if (envValue) {
+    try {
+      const stripped = envValue.replace(/\/api\/v1\/?$/i, '').replace(/\/$/, '');
+      const withProtocol = stripped.includes('://') ? stripped : `http://${stripped}`;
+      return new URL(withProtocol).origin;
+    } catch {
+      // fallback below
+    }
+  }
+
+  const hostUri =
+    (Constants.expoConfig as { hostUri?: string } | null)?.hostUri ??
+    (Constants.manifest2 as { extra?: { expoClient?: { hostUri?: string } } } | null)?.extra?.expoClient
+      ?.hostUri;
+
+  if (hostUri) {
+    const host = hostUri.split(':')[0];
+    if (host) return `http://${host}:8080`;
+  }
+
+  return 'http://10.0.2.2:8080';
+}
+
+export const API_BASE_URL = resolveApiOrigin();
 
 type RequestOptions = RequestInit & {
   userId?: number | null;
@@ -18,14 +48,21 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   const resolvedUserId = resolveUserId(userId);
   const isFormDataBody = typeof FormData !== 'undefined' && rest.body instanceof FormData;
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...rest,
-    headers: {
-      ...(isFormDataBody ? {} : { 'Content-Type': 'application/json' }),
-      ...(typeof resolvedUserId === 'number' ? { 'X-User-Id': String(resolvedUserId) } : {}),
-      ...(headers ?? {}),
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...rest,
+      headers: {
+        ...(isFormDataBody ? {} : { 'Content-Type': 'application/json' }),
+        ...(typeof resolvedUserId === 'number' ? { 'X-User-Id': String(resolvedUserId) } : {}),
+        ...(headers ?? {}),
+      },
+    });
+  } catch {
+    throw new Error(
+      `Không kết nối được máy chủ (${API_BASE_URL}). Bật backend, dùng cùng Wi-Fi với điện thoại, hoặc set EXPO_PUBLIC_API_URL=http://<IP-LAN>:8080 rồi chạy lại Expo.`
+    );
+  }
 
   if (!response.ok) {
     const message = await response.text();

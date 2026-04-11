@@ -8,6 +8,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { SocialOAuthButton } from '@/components/ui/social-oauth-button';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { login } from '@/utils/api';
@@ -25,7 +26,7 @@ export default function LoginScreen() {
 
   async function handleLogin() {
     if (!identifier.trim() || !password.trim()) {
-      Alert.alert('Validation', 'Please fill email/username and password');
+      Alert.alert('Thiếu thông tin', 'Vui lòng nhập email hoặc tên đăng nhập và mật khẩu.');
       return;
     }
 
@@ -42,7 +43,7 @@ export default function LoginScreen() {
       });
       router.replace('/(tabs)');
     } catch (error: any) {
-      Alert.alert('Login failed', error?.message ?? 'Invalid credentials');
+      Alert.alert('Đăng nhập thất bại', error?.message ?? 'Sai thông tin hoặc máy chủ không phản hồi.');
     } finally {
       setLoading(false);
     }
@@ -58,24 +59,41 @@ export default function LoginScreen() {
             contentFit="cover"
           />
           <View style={styles.heroOverlay}>
-            <ThemedText type="title" style={styles.heroTitle}>Welcome back</ThemedText>
-            <ThemedText style={{ color: palette.textMuted }}>Your travel memories, beautifully curated.</ThemedText>
+            <ThemedText type="title" style={styles.heroTitle}>Chào mừng trở lại</ThemedText>
+            <ThemedText style={{ color: palette.textMuted }}>
+              Lưu giữ và lên lịch những chuyến đi của bạn.
+            </ThemedText>
           </View>
         </Card>
 
         <View style={styles.form}>
-          <Input placeholder="Email or username" value={identifier} onChangeText={setIdentifier} autoCapitalize="none" />
-          <Input placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry />
+          <Input
+            placeholder="Email hoặc tên đăng nhập"
+            value={identifier}
+            onChangeText={setIdentifier}
+            autoCapitalize="none"
+          />
+          <Input placeholder="Mật khẩu" value={password} onChangeText={setPassword} secureTextEntry />
 
-          <Button title="Log In" size="lg" onPress={handleLogin} loading={loading} />
+          <Button title="Đăng nhập" size="lg" onPress={handleLogin} loading={loading} />
 
           <View style={styles.socialRow}>
-            <Button title="Google" variant="secondary" style={styles.socialBtn} />
-            <Button title="Apple" variant="secondary" style={styles.socialBtn} />
+            <SocialOAuthButton
+              provider="google"
+              label="Google"
+              onPress={() => Alert.alert('Thông báo', 'Đăng nhập Google sẽ được bổ sung sau.')}
+            />
+            <SocialOAuthButton
+              provider="apple"
+              label="Apple"
+              onPress={() => Alert.alert('Thông báo', 'Đăng nhập Apple sẽ được bổ sung sau.')}
+            />
           </View>
 
           <Pressable onPress={() => router.push('/sign-up')}>
-            <ThemedText style={styles.switchText}>Don't have an account? Sign Up</ThemedText>
+            <ThemedText style={[styles.switchText, { color: palette.primary }]}>
+              Chưa có tài khoản? Đăng ký
+            </ThemedText>
           </Pressable>
         </View>
       </ScrollView>
@@ -114,9 +132,6 @@ const styles = StyleSheet.create({
   socialRow: {
     flexDirection: 'row',
     gap: Spacing.md,
-  },
-  socialBtn: {
-    flex: 1,
   },
   switchText: {
     textAlign: 'center',
