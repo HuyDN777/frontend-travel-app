@@ -28,7 +28,3 @@ export function getSessionUserId() {
 export function isLoggedIn() {
   return currentUser !== null;
 }
-
-export function isAdmin() {
-  return currentUser?.role?.toUpperCase() === 'ADMIN';
-}

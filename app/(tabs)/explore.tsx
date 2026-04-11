@@ -6,13 +6,11 @@ import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from '
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { CommunityPostCard } from '@/components/ui/community-post-card';
-import { Input } from '@/components/ui/input';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
   deleteCommunityPost,
   getCommunityFeed,
-  searchCommunityPosts,
   toggleLike,
   toggleSave,
   type CommunityPost,
@@ -28,9 +26,8 @@ export default function CommunityScreen() {
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
 
-  const loadFeed = useCallback(async (query?: string) => {
+  const loadFeed = useCallback(async () => {
     const userId = getSessionUserId();
     if (!userId) {
       router.replace('/login');
@@ -39,9 +36,7 @@ export default function CommunityScreen() {
 
     setLoading(true);
     try {
-      const feed = query && query.trim()
-        ? await searchCommunityPosts(query, userId)
-        : await getCommunityFeed(userId);
+      const feed = await getCommunityFeed(userId);
       setPosts(feed);
     } catch (error: any) {
       Alert.alert('Error', error?.message ?? 'Khong tai duoc community feed');
@@ -51,16 +46,8 @@ export default function CommunityScreen() {
   }, [router]);
 
   useEffect(() => {
-    loadFeed(searchQuery);
+    loadFeed();
   }, [loadFeed]);
-
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      loadFeed(searchQuery);
-    }, 250);
-
-    return () => clearTimeout(timeout);
-  }, [searchQuery, loadFeed]);
 
   async function handleRefresh() {
     const userId = getSessionUserId();
@@ -71,9 +58,7 @@ export default function CommunityScreen() {
 
     try {
       setRefreshing(true);
-      const feed = searchQuery.trim()
-        ? await searchCommunityPosts(searchQuery, userId)
-        : await getCommunityFeed(userId);
+      const feed = await getCommunityFeed(userId);
       setPosts(feed);
     } catch (error: any) {
       Alert.alert('Error', error?.message ?? 'Khong refresh duoc feed');
@@ -151,22 +136,10 @@ export default function CommunityScreen() {
           >
             <Ionicons name="add" size={moderateScale(18)} color={palette.text} />
           </Pressable>
+          <Pressable style={[styles.searchBtn, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+            <Ionicons name="search-outline" size={moderateScale(18)} color={palette.text} />
+          </Pressable>
         </View>
-      </View>
-
-      <View style={styles.searchWrap}>
-        <Input
-          placeholder="Search posts, places, moments"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          autoCapitalize="none"
-          leading={<Ionicons name="search-outline" size={moderateScale(18)} color={palette.textMuted} />}
-          trailing={searchQuery ? (
-            <Pressable onPress={() => setSearchQuery('')}>
-              <Ionicons name="close-circle-outline" size={moderateScale(18)} color={palette.textMuted} />
-            </Pressable>
-          ) : null}
-        />
       </View>
 
       <ScrollView
@@ -220,9 +193,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  searchWrap: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
+  searchBtn: {
+    width: moderateScale(36),
+    height: moderateScale(36),
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   content: {
     padding: Spacing.lg,

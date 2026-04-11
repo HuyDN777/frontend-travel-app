@@ -2,22 +2,6 @@ import { getSessionUserId } from '@/utils/session';
 
 export const API_BASE_URL = 'http://192.168.1.105:8080';
 
-export function resolveMediaUrl(url?: string | null) {
-  if (!url) {
-    return '';
-  }
-
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    return url;
-  }
-
-  if (url.startsWith('/')) {
-    return `${API_BASE_URL}${url}`;
-  }
-
-  return `${API_BASE_URL}/${url}`;
-}
-
 type RequestOptions = RequestInit & {
   userId?: number | null;
 };
@@ -86,8 +70,6 @@ export type UserProfile = {
   role: string;
 };
 
-export type UserSummary = UserProfile;
-
 export type TripItem = {
   id: number;
   tripName: string;
@@ -107,8 +89,6 @@ export type CreateTripPayload = {
 export type CommunityPost = {
   id: number;
   userId: number;
-  username: string;
-  avatarUrl: string | null;
   tripId: number | null;
   isTripLinked: number;
   title: string;
@@ -132,18 +112,8 @@ export type CommunityPostPayload = {
   budget?: number | null;
 };
 
-export type UpdateProfilePayload = Partial<UserProfile> & {
-  currentPassword?: string;
-  password?: string;
-};
-
 export type UploadImageRes = {
-  imageUrl?: string;
-  avatarUrl?: string;
-};
-
-export type AdminRoleUpdatePayload = {
-  role: string;
+  imageUrl: string;
 };
 
 export async function register(payload: RegisterPayload) {
@@ -164,7 +134,7 @@ export async function getMyProfile(userId?: number) {
   return request<UserProfile>('/api/v1/users/me', { userId, method: 'GET' });
 }
 
-export async function updateMyProfile(payload: UpdateProfilePayload, userId?: number) {
+export async function updateMyProfile(payload: Partial<UserProfile> & { password?: string }, userId?: number) {
   const resolvedUserId = resolveUserId(userId);
   if (typeof resolvedUserId !== 'number') {
     throw new Error('Not logged in');
@@ -201,14 +171,6 @@ export async function createTrip(payload: CreateTripPayload, userId?: number) {
 
 export async function getCommunityFeed(userId?: number) {
   return request<CommunityPost[]>('/api/v2/community/posts', { userId, method: 'GET' });
-}
-
-export async function searchCommunityPosts(query: string, userId?: number) {
-  const q = query.trim();
-  return request<CommunityPost[]>(`/api/v2/community/posts/search?q=${encodeURIComponent(q)}`, {
-    userId,
-    method: 'GET',
-  });
 }
 
 export async function getCommunityPost(postId: number, userId?: number) {
@@ -253,55 +215,6 @@ export async function uploadCommunityImage(fileUri: string, userId?: number) {
     userId: resolvedUserId,
     method: 'POST',
     body: formData,
-  });
-}
-
-export async function uploadAvatarImage(fileUri: string, userId?: number) {
-  const resolvedUserId = resolveUserId(userId);
-  if (typeof resolvedUserId !== 'number') {
-    throw new Error('Not logged in');
-  }
-
-  const fileName = fileUri.split('/').pop() ?? `avatar-${Date.now()}.jpg`;
-  const lowerName = fileName.toLowerCase();
-  const mimeType = lowerName.endsWith('.png') ? 'image/png' : 'image/jpeg';
-
-  const formData = new FormData();
-  formData.append('image', {
-    uri: fileUri,
-    name: fileName,
-    type: mimeType,
-  } as any);
-
-  return request<UploadImageRes>(`/api/v1/users/${resolvedUserId}/avatar`, {
-    userId: resolvedUserId,
-    method: 'POST',
-    body: formData,
-  });
-}
-
-export async function getAllUsers(userId?: number) {
-  const resolvedUserId = resolveUserId(userId);
-  if (typeof resolvedUserId !== 'number') {
-    throw new Error('Not logged in');
-  }
-
-  return request<UserSummary[]>('/api/v1/admin/users', {
-    userId: resolvedUserId,
-    method: 'GET',
-  });
-}
-
-export async function updateUserRole(targetUserId: number, role: string, userId?: number) {
-  const resolvedUserId = resolveUserId(userId);
-  if (typeof resolvedUserId !== 'number') {
-    throw new Error('Not logged in');
-  }
-
-  return request<UserSummary>(`/api/v1/admin/users/${targetUserId}/role`, {
-    userId: resolvedUserId,
-    method: 'PATCH',
-    body: JSON.stringify({ role } satisfies AdminRoleUpdatePayload),
   });
 }
 
