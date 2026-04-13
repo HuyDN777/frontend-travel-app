@@ -104,6 +104,29 @@ export type LoginPayload = {
   password: string;
 };
 
+export type SendOTPPayload = {
+  email: string;
+};
+
+export type VerifyOTPPayload = {
+  email: string;
+  otpCode: string;
+};
+
+export type CompleteRegistrationPayload = {
+  username: string;
+  password: string;
+  email: string;
+  fullName?: string;
+  avatarUrl?: string;
+};
+
+export type OTPRes = {
+  message: string;
+  email?: string;
+  expiryMinutes?: number;
+};
+
 export type UserProfile = {
   id: number;
   username: string;
@@ -178,6 +201,27 @@ export async function register(payload: RegisterPayload) {
 
 export async function login(payload: LoginPayload) {
   return request<AuthRes>('/api/v1/auth/login', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function sendOTP(payload: SendOTPPayload) {
+  return request<OTPRes>('/api/v1/auth/send-otp', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function verifyOTP(payload: VerifyOTPPayload) {
+  return request<{ message: string }>('/api/v1/auth/verify-otp', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function completeRegistration(payload: CompleteRegistrationPayload) {
+  return request<AuthRes>('/api/v1/auth/complete-registration', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
