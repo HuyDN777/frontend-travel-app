@@ -104,6 +104,15 @@ export type LoginPayload = {
   password: string;
 };
 
+export type ForgotPasswordPayload = {
+  email: string;
+};
+
+export type ResetPasswordPayload = {
+  email: string;
+  newPassword: string;
+};
+
 export type SendOTPPayload = {
   email: string;
 };
@@ -201,6 +210,27 @@ export async function register(payload: RegisterPayload) {
 
 export async function login(payload: LoginPayload) {
   return request<AuthRes>('/api/v1/auth/login', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function sendForgotPasswordOTP(payload: ForgotPasswordPayload) {
+  return request<OTPRes>('/api/v1/auth/forgot-password/send-otp', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function verifyForgotPasswordOTP(payload: VerifyOTPPayload) {
+  return request<{ message: string }>('/api/v1/auth/forgot-password/verify-otp', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function resetForgotPassword(payload: ResetPasswordPayload) {
+  return request<{ message: string }>('/api/v1/auth/forgot-password/reset', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
