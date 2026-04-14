@@ -1,3 +1,13 @@
+export async function deleteUser(targetUserId: number, userId?: number) {
+  const resolvedUserId = resolveUserId(userId);
+  if (typeof resolvedUserId !== 'number') {
+    throw new Error('Not logged in');
+  }
+  return request<void>(`/api/v1/admin/users/${targetUserId}`, {
+    userId: resolvedUserId,
+    method: 'DELETE',
+  });
+}
 import Constants from 'expo-constants';
 import * as ImageManipulator from 'expo-image-manipulator';
 
