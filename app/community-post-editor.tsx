@@ -1,6 +1,6 @@
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
@@ -12,7 +12,6 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { moderateScale } from '@/utils/responsive';
 import {
   createCommunityPost,
   getCommunityPost,
@@ -20,7 +19,8 @@ import {
   uploadCommunityImages,
   type CommunityPostPayload,
 } from '@/utils/api';
-import { getSessionUserId, getSessionUser } from '@/utils/session';
+import { moderateScale } from '@/utils/responsive';
+import { getSessionUser, getSessionUserId } from '@/utils/session';
 
 const MAX_IMAGES = 5;
 
@@ -60,7 +60,7 @@ export default function CommunityPostEditorScreen() {
         setLocation(post.location ?? '');
         setBudget(post.budget ? String(post.budget) : '');
       } catch (error: any) {
-        Alert.alert('Error', error?.message ?? 'Khong tai duoc bai viet');
+        Alert.alert('Lỗi', error?.message ?? 'Không tải được bài viết');
       } finally {
         setLoading(false);
       }
@@ -75,13 +75,13 @@ export default function CommunityPostEditorScreen() {
     const currentCount = imageUrls.length + pickedImageUris.length;
     const remainingSlots = MAX_IMAGES - currentCount;
     if (remainingSlots <= 0) {
-      Alert.alert('Limit', `Toi da ${MAX_IMAGES} anh cho mot bai viet`);
+      Alert.alert('Giới hạn', `Tối đa ${MAX_IMAGES} ảnh cho một bài viết`);
       return;
     }
 
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Permission', 'Can cap quyen thu vien anh de chon anh');
+      Alert.alert('Quyền truy cập', 'Cần cấp quyền truy cập thư viện ảnh');
       return;
     }
 
@@ -104,13 +104,13 @@ export default function CommunityPostEditorScreen() {
   async function handleTakePhoto() {
     const currentCount = imageUrls.length + pickedImageUris.length;
     if (currentCount >= MAX_IMAGES) {
-      Alert.alert('Limit', `Toi da ${MAX_IMAGES} anh cho mot bai viet`);
+      Alert.alert('Giới hạn', `Tối đa ${MAX_IMAGES} ảnh cho một bài viết`);
       return;
     }
 
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Permission', 'Can cap quyen camera de chup anh');
+      Alert.alert('Quyền truy cập', 'Cần cấp quyền truy cập camera');
       return;
     }
 
@@ -163,7 +163,7 @@ export default function CommunityPostEditorScreen() {
       }
       router.back();
     } catch (error: any) {
-      Alert.alert('Error', error?.message ?? 'Khong the luu bai viet');
+      Alert.alert('Lỗi', error?.message ?? 'Không thể lưu bài viết');
     } finally {
       setLoading(false);
     }
@@ -173,10 +173,10 @@ export default function CommunityPostEditorScreen() {
     <AccessGate required="user">
       <ThemedView style={styles.root}>
         <Stack.Screen options={{ headerShown: false }} />
-        <View style={[styles.header, { borderBottomColor: palette.border }]}> 
-          <Button title="Cancel" variant="ghost" onPress={() => router.back()} />
-          <ThemedText type="defaultSemiBold">{isEdit ? 'Edit Post' : 'New Post'}</ThemedText>
-          <Button title="Post" onPress={handleSubmit} loading={loading} />
+        <View style={[styles.header, { borderBottomColor: palette.border }]}>
+          <Button title="Hủy" variant="ghost" onPress={() => router.back()} />
+          <ThemedText type="defaultSemiBold">{isEdit ? 'Chỉnh sửa bài' : 'Bài viết mới'}</ThemedText>
+          <Button title="Đăng" onPress={handleSubmit} loading={loading} />
         </View>
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <Card style={styles.form}>
@@ -219,51 +219,51 @@ export default function CommunityPostEditorScreen() {
 }
 
 const styles = StyleSheet.create({
-    userRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginBottom: 8,
-    },
-    userAvatar: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
-      borderWidth: 2,
-      borderColor: '#E8E3D8',
-    },
-    userName: {
-      fontSize: 16,
-      color: '#222',
-    },
-    actionRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      marginTop: 8,
-    },
-    actionIcon: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      backgroundColor: '#F8F6F2',
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderWidth: 1,
-      borderColor: '#E8E3D8',
-      marginRight: 4,
-    },
-    actionInput: {
-      flex: 1,
-      minWidth: 60,
-      marginHorizontal: 2,
-      backgroundColor: '#F8F6F2',
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: '#E8E3D8',
-      paddingHorizontal: 8,
-      fontSize: 13,
-      height: 36,
-    },
+  userRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  userAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: '#E8E3D8',
+  },
+  userName: {
+    fontSize: 16,
+    color: '#222',
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+  },
+  actionIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F8F6F2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E8E3D8',
+    marginRight: 4,
+  },
+  actionInput: {
+    flex: 1,
+    minWidth: 60,
+    marginHorizontal: 2,
+    backgroundColor: '#F8F6F2',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E8E3D8',
+    paddingHorizontal: 8,
+    fontSize: 13,
+    height: 36,
+  },
   root: {
     flex: 1,
   },

@@ -1,6 +1,6 @@
-import { Stack, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
+import { Stack, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
@@ -13,8 +13,8 @@ import { Input } from '@/components/ui/input';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { getMyProfile, updateMyProfile, uploadAvatar } from '@/utils/api';
-import { clearSessionUser, getSessionUser, getSessionUserId, setSessionUser } from '@/utils/session';
 import { moderateScale } from '@/utils/responsive';
+import { clearSessionUser, getSessionUser, getSessionUserId, setSessionUser } from '@/utils/session';
 
 export default function EditProfileScreen() {
   const router = useRouter();
@@ -33,7 +33,7 @@ export default function EditProfileScreen() {
   async function handlePickAvatarFromLibrary() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Permission', 'Can cap quyen thu vien anh');
+      Alert.alert('Quyền truy cập', 'Cần cấp quyền truy cập thư viện ảnh');
       return;
     }
 
@@ -63,7 +63,7 @@ export default function EditProfileScreen() {
         });
       }
     } catch (error: any) {
-      Alert.alert('Error', error?.message ?? 'Khong the cap nhat avatar');
+      Alert.alert('Lỗi', error?.message ?? 'Không thể cập nhật ảnh đại diện');
     } finally {
       setLoading(false);
     }
@@ -72,7 +72,7 @@ export default function EditProfileScreen() {
   async function handleTakeAvatarPhoto() {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Permission', 'Can cap quyen camera');
+      Alert.alert('Quyền truy cập', 'Cần cấp quyền truy cập camera');
       return;
     }
 
@@ -102,7 +102,7 @@ export default function EditProfileScreen() {
         });
       }
     } catch (error: any) {
-      Alert.alert('Error', error?.message ?? 'Khong the cap nhat avatar');
+      Alert.alert('Lỗi', error?.message ?? 'Không thể cập nhật ảnh đại diện');
     } finally {
       setLoading(false);
     }
@@ -126,7 +126,7 @@ export default function EditProfileScreen() {
         setUsername(profile.username ?? '');
         setAvatarUrl(profile.avatarUrl ?? '');
       } catch (error: any) {
-        Alert.alert('Error', error?.message ?? 'Khong tai duoc profile');
+        Alert.alert('Lỗi', error?.message ?? 'Không tải được hồ sơ');
       } finally {
         setLoading(false);
       }
@@ -162,10 +162,10 @@ export default function EditProfileScreen() {
         avatarUrl,
         role: getSessionUser()?.role,
       });
-      Alert.alert('Success', 'Da cap nhat profile');
+      Alert.alert('Thành công', 'Đã cập nhật hồ sơ');
       router.back();
     } catch (error: any) {
-      Alert.alert('Error', error?.message ?? 'Khong the cap nhat profile');
+      Alert.alert('Lỗi', error?.message ?? 'Không thể cập nhật hồ sơ');
     } finally {
       setLoading(false);
     }
@@ -176,61 +176,61 @@ export default function EditProfileScreen() {
       <ThemedView style={styles.root}>
         <Stack.Screen options={{ headerShown: false }} />
 
-      <View style={[styles.header, { borderBottomColor: palette.border }]}>
-        <Button title="Back" variant="ghost" onPress={() => router.back()} />
-        <ThemedText type="defaultSemiBold">Edit Profile</ThemedText>
-        <View style={styles.headerSpacer} />
-      </View>
+        <View style={[styles.header, { borderBottomColor: palette.border }]}>
+          <Button title="Trở lại" variant="ghost" onPress={() => router.back()} />
+          <ThemedText type="defaultSemiBold">Chỉnh sửa hồ sơ</ThemedText>
+          <View style={styles.headerSpacer} />
+        </View>
 
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <Card style={styles.form}>
-          <View style={styles.avatarBox}>
-            <Image source={{ uri: avatarUrl || 'https://i.pravatar.cc/100?img=12' }} style={styles.avatar} contentFit="cover" />
-            <View style={styles.avatarActions}>
-              <Button title="Chon anh" variant="secondary" onPress={handlePickAvatarFromLibrary} />
-              <Button title="Chup anh" variant="secondary" onPress={handleTakeAvatarPhoto} />
+            <View style={styles.avatarBox}>
+              <Image source={{ uri: avatarUrl || 'https://i.pravatar.cc/100?img=12' }} style={styles.avatar} contentFit="cover" />
+              <View style={styles.avatarActions}>
+                <Button title="Chọn ảnh" variant="secondary" onPress={handlePickAvatarFromLibrary} />
+                <Button title="Chụp ảnh" variant="secondary" onPress={handleTakeAvatarPhoto} />
+              </View>
             </View>
-          </View>
 
 
-          <View style={{ marginBottom: 8 }}>
-            <ThemedText style={{ marginBottom: 4, color: '#A6A29A', fontSize: 14 }}>Họ và tên</ThemedText>
-            <Input placeholder="Nhập họ và tên" value={fullName} onChangeText={setFullName} />
-          </View>
-          <View style={{ marginBottom: 8 }}>
-            <ThemedText style={{ marginBottom: 4, color: '#A6A29A', fontSize: 14 }}>Email</ThemedText>
-            <Input placeholder="Nhập email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
-          </View>
-          <View style={{ marginBottom: 8 }}>
-            <ThemedText style={{ marginBottom: 4, color: '#A6A29A', fontSize: 14 }}>Tên đăng nhập</ThemedText>
-            <Input placeholder="Nhập tên đăng nhập" value={username} onChangeText={setUsername} autoCapitalize="none" />
-          </View>
+            <View style={{ marginBottom: 8 }}>
+              <ThemedText style={{ marginBottom: 4, color: '#A6A29A', fontSize: 14 }}>Họ và tên</ThemedText>
+              <Input placeholder="Nhập họ và tên" value={fullName} onChangeText={setFullName} />
+            </View>
+            <View style={{ marginBottom: 8 }}>
+              <ThemedText style={{ marginBottom: 4, color: '#A6A29A', fontSize: 14 }}>Email</ThemedText>
+              <Input placeholder="Nhập email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
+            </View>
+            <View style={{ marginBottom: 8 }}>
+              <ThemedText style={{ marginBottom: 4, color: '#A6A29A', fontSize: 14 }}>Tên đăng nhập</ThemedText>
+              <Input placeholder="Nhập tên đăng nhập" value={username} onChangeText={setUsername} autoCapitalize="none" />
+            </View>
 
-          <Pressable onPress={() => setShowPasswordForm((prev) => !prev)}>
-            <ThemedText type="defaultSemiBold">Change Password</ThemedText>
-          </Pressable>
+            <Pressable onPress={() => setShowPasswordForm((prev) => !prev)}>
+              <ThemedText type="defaultSemiBold">Đổi mật khẩu</ThemedText>
+            </Pressable>
 
-          {showPasswordForm ? (
-            <>
-              <Input
-                placeholder="Current password"
-                value={currentPassword}
-                onChangeText={setCurrentPassword}
-                secureTextEntry
-              />
-              <Input placeholder="New password" value={newPassword} onChangeText={setNewPassword} secureTextEntry />
-            </>
-          ) : null}
+            {showPasswordForm ? (
+              <>
+                <Input
+                  placeholder="Mật khẩu hiện tại"
+                  value={currentPassword}
+                  onChangeText={setCurrentPassword}
+                  secureTextEntry
+                />
+                <Input placeholder="Mật khẩu mới" value={newPassword} onChangeText={setNewPassword} secureTextEntry />
+              </>
+            ) : null}
 
-          <Button title="Lưu thay đổi" size="lg" onPress={handleSave} loading={loading} />
-          <Button
-            title="Dang xuat"
-            variant="ghost"
-            onPress={() => {
-              clearSessionUser();
-              router.replace('/login');
-            }}
-          />
+            <Button title="Lưu thay đổi" size="lg" onPress={handleSave} loading={loading} />
+            <Button
+              title="Đăng xuất"
+              variant="ghost"
+              onPress={() => {
+                clearSessionUser();
+                router.replace('/login');
+              }}
+            />
           </Card>
         </ScrollView>
       </ThemedView>

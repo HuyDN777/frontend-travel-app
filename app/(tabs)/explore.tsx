@@ -177,7 +177,7 @@ export default function CommunityScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void handleRefresh()} />}
       >
         <Input
-          placeholder="Tim bai viet, dia diem, tac gia..."
+          placeholder="Tìm bài viết, địa điểm, tác giả..."
           value={searchQuery}
           onChangeText={setSearchQuery}
           autoCapitalize="none"

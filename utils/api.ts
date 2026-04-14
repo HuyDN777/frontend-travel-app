@@ -326,10 +326,71 @@ export async function createTrip(payload: CreateTripPayload, userId?: number) {
     throw new Error('Not logged in');
   }
 
-  return request(`/api/v1/create-trip/${resolvedUserId}`, {
+  return request<number>(`/api/v1/create-trip/${resolvedUserId}`, {
     userId: resolvedUserId,
     method: 'POST',
     body: JSON.stringify(payload),
+  });
+}
+
+export type InviteCompanionRes = {
+  memberId: number;
+  tripId: number;
+  tripName: string;
+  userId: number;
+  inviteeName: string;
+  inviteeEmail: string;
+  memberRole: number;
+  status: number;
+};
+
+export async function inviteCompanion(
+  tripId: number,
+  payload: { inviteeEmail: string; memberRole?: number },
+  userId?: number
+) {
+  const resolvedUserId = resolveUserId(userId);
+  if (typeof resolvedUserId !== 'number') throw new Error('Not logged in');
+  return request<InviteCompanionRes>(`/api/v1/trips/${tripId}/invite`, {
+    userId: resolvedUserId,
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getTripMembers(tripId: number, userId?: number) {
+  const resolvedUserId = resolveUserId(userId);
+  if (typeof resolvedUserId !== 'number') throw new Error('Not logged in');
+  return request<InviteCompanionRes[]>(`/api/v1/trips/${tripId}/members`, {
+    userId: resolvedUserId,
+    method: 'GET',
+  });
+}
+
+export async function getPendingInvitations(userId?: number) {
+  const resolvedUserId = resolveUserId(userId);
+  if (typeof resolvedUserId !== 'number') throw new Error('Not logged in');
+  return request<InviteCompanionRes[]>('/api/v1/trips/invitations/pending', {
+    userId: resolvedUserId,
+    method: 'GET',
+  });
+}
+
+export async function acceptInvitation(memberId: number, userId?: number) {
+  const resolvedUserId = resolveUserId(userId);
+  if (typeof resolvedUserId !== 'number') throw new Error('Not logged in');
+  return request<InviteCompanionRes>(`/api/v1/trips/members/${memberId}/accept`, {
+    userId: resolvedUserId,
+    method: 'PUT',
+  });
+}
+
+export async function declineInvitation(memberId: number, userId?: number) {
+  const resolvedUserId = resolveUserId(userId);
+  if (typeof resolvedUserId !== 'number') throw new Error('Not logged in');
+  return request<void>(`/api/v1/trips/members/${memberId}/decline`, {
+    userId: resolvedUserId,
+    method: 'DELETE',
   });
 }
 

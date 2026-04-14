@@ -194,120 +194,120 @@ export default function SignUpScreen() {
               </ThemedText>
               <ThemedText style={{ color: palette.textMuted }}>Bắt đầu hành trình của bạn hôm nay</ThemedText>
 
-          <Input
-            placeholder="Nhập họ và tên"
-            value={fullName}
-            onChangeText={setFullName}
-            editable={!loading && !sendingOtp && !verifyingOtp}
-          />
-          <Input
-            placeholder="Nhập tên đăng nhập"
-            value={username}
-            onChangeText={setUsername}
-            autoCapitalize="none"
-            editable={!loading && !sendingOtp && !verifyingOtp}
-          />
-          <View style={styles.inlineRow}>
-            <Input
-              style={styles.flexInput}
-              placeholder="Nhập email"
-              value={email}
-              onChangeText={(value) => {
-                setEmail(value);
-                setOtpVerified(false);
-              }}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              editable={!loading && !sendingOtp && !verifyingOtp}
-            />
-            <Button
-              title={
-                sendingOtp
-                  ? 'Đang gửi...'
-                  : resendCooldown > 0
-                    ? `Gửi lại (${resendCooldown}s)`
-                    : otpSent
-                      ? 'Gửi lại'
-                      : 'Xác thực email'
-              }
-              onPress={handleSendOtp}
-              loading={sendingOtp}
-              disabled={loading || verifyingOtp || sendingOtp || resendCooldown > 0}
-              style={resendCooldown > 0 ? [styles.inlineButton, styles.disabledInlineButton] : styles.inlineButton}
-              size="md"
-            />
-          </View>
+              <Input
+                placeholder="Nhập họ và tên"
+                value={fullName}
+                onChangeText={setFullName}
+                editable={!loading && !sendingOtp && !verifyingOtp}
+              />
+              <Input
+                placeholder="Nhập tên đăng nhập"
+                value={username}
+                onChangeText={setUsername}
+                autoCapitalize="none"
+                editable={!loading && !sendingOtp && !verifyingOtp}
+              />
+              <View style={styles.inlineRow}>
+                <Input
+                  style={styles.flexInput}
+                  placeholder="Nhập email"
+                  value={email}
+                  onChangeText={(value) => {
+                    setEmail(value);
+                    setOtpVerified(false);
+                  }}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  editable={!loading && !sendingOtp && !verifyingOtp}
+                />
+                <Button
+                  title={
+                    sendingOtp
+                      ? 'Đang gửi...'
+                      : resendCooldown > 0
+                        ? `Gửi lại (${resendCooldown}s)`
+                        : otpSent
+                          ? 'Gửi lại'
+                          : 'Xác thực email'
+                  }
+                  onPress={handleSendOtp}
+                  loading={sendingOtp}
+                  disabled={loading || verifyingOtp || sendingOtp || resendCooldown > 0}
+                  style={resendCooldown > 0 ? [styles.inlineButton, styles.disabledInlineButton] : styles.inlineButton}
+                  size="md"
+                />
+              </View>
 
-          <View style={styles.inlineRow}>
-            <Input
-              style={styles.flexInput}
-              placeholder="Nhập OTP 6 số"
-              value={otpCode}
-              onChangeText={(value) => {
-                setOtpCode(value);
-                setOtpVerified(false);
-              }}
-              keyboardType="number-pad"
-              maxLength={6}
-              editable={!loading && !sendingOtp && !verifyingOtp}
-            />
-            <Button
-              title={otpVerified ? 'Da xac nhan' : 'Xác nhận'}
-              onPress={handleVerifyOtp}
-              loading={verifyingOtp}
-              disabled={loading || sendingOtp || verifyingOtp || otpCode.trim().length !== 6}
-              style={styles.inlineButton}
-              size="md"
-              variant={otpVerified ? 'secondary' : 'primary'}
-            />
-          </View>
+              <View style={styles.inlineRow}>
+                <Input
+                  style={styles.flexInput}
+                  placeholder="Nhập OTP 6 số"
+                  value={otpCode}
+                  onChangeText={(value) => {
+                    setOtpCode(value);
+                    setOtpVerified(false);
+                  }}
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  editable={!loading && !sendingOtp && !verifyingOtp}
+                />
+                <Button
+                  title={otpVerified ? 'Đã xác nhận' : 'Xác nhận'}
+                  onPress={handleVerifyOtp}
+                  loading={verifyingOtp}
+                  disabled={loading || sendingOtp || verifyingOtp || otpCode.trim().length !== 6}
+                  style={styles.inlineButton}
+                  size="md"
+                  variant={otpVerified ? 'secondary' : 'primary'}
+                />
+              </View>
 
-          {otpVerified ? (
-            <ThemedText style={{ color: palette.success }}>Email đã xác thực thành công.</ThemedText>
-          ) : otpSent ? (
-            <ThemedText style={{ color: palette.textMuted }}>
-              {resendCooldown > 0
-                ? `Vui lòng nhập OTP đã gửi tới email. Có thể gửi lại sau ${resendCooldown}s.`
-                : 'Vui lòng nhập OTP đã gửi tới email để tiếp tục.'}
-            </ThemedText>
-          ) : null}
+              {otpVerified ? (
+                <ThemedText style={{ color: palette.success }}>Email đã xác thực thành công.</ThemedText>
+              ) : otpSent ? (
+                <ThemedText style={{ color: palette.textMuted }}>
+                  {resendCooldown > 0
+                    ? `Vui lòng nhập OTP đã gửi tới email. Có thể gửi lại sau ${resendCooldown}s.`
+                    : 'Vui lòng nhập OTP đã gửi tới email để tiếp tục.'}
+                </ThemedText>
+              ) : null}
 
-          <Input
-            placeholder="Nhập mật khẩu (tối thiểu 6 ký tự)"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            editable={!loading && !sendingOtp && !verifyingOtp}
-          />
-          <Input
-            placeholder="Nhập lại mật khẩu"
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            secureTextEntry
-            editable={!loading && !sendingOtp && !verifyingOtp}
-          />
+              <Input
+                placeholder="Nhập mật khẩu (tối thiểu 6 ký tự)"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                editable={!loading && !sendingOtp && !verifyingOtp}
+              />
+              <Input
+                placeholder="Nhập lại mật khẩu"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry
+                editable={!loading && !sendingOtp && !verifyingOtp}
+              />
 
-          <Button
-            title="Đăng ký"
-            onPress={handleSignUp}
-            loading={loading}
-            disabled={loading || sendingOtp || verifyingOtp}
-            style={styles.button}
-            size="lg"
-          />
+              <Button
+                title="Đăng ký"
+                onPress={handleSignUp}
+                loading={loading}
+                disabled={loading || sendingOtp || verifyingOtp}
+                style={styles.button}
+                size="lg"
+              />
 
-          <View style={styles.socialRow}>
-            <SocialOAuthButton
-              provider="google"
-              label="Google"
-              onPress={() => Alert.alert('Thông báo', 'Đăng ký bằng Google sẽ được bổ sung sau.')}
-            />
-            <SocialOAuthButton
-              provider="apple"
-              label="Apple"
-              onPress={() => Alert.alert('Thông báo', 'Đăng ký bằng Apple sẽ được bổ sung sau.')}
-            />
-          </View>
+              <View style={styles.socialRow}>
+                <SocialOAuthButton
+                  provider="google"
+                  label="Google"
+                  onPress={() => Alert.alert('Thông báo', 'Đăng ký bằng Google sẽ được bổ sung sau.')}
+                />
+                <SocialOAuthButton
+                  provider="apple"
+                  label="Apple"
+                  onPress={() => Alert.alert('Thông báo', 'Đăng ký bằng Apple sẽ được bổ sung sau.')}
+                />
+              </View>
 
               <Pressable onPress={() => router.replace('/login')} disabled={loading}>
                 <ThemedText style={[styles.switchText, { color: palette.primary }]}>

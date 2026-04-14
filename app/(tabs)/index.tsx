@@ -1,9 +1,10 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Image } from 'expo-image';
 import { useFocusEffect } from '@react-navigation/native';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Card } from '@/components/ui/card';
 import { Colors, Elevation, Radius, Spacing, Typography } from '@/constants/theme';
@@ -31,10 +32,11 @@ const destinations = [
 /**
  * Trang chủ: lối tắt đặt vé + banner AI (mục 4) theo code nhóm.
  */
-export default function HomeScreen() {
-  const router = useRouter();
+export default function ExploreScreen() {
   const scheme = useColorScheme() ?? 'light';
   const palette = Colors[scheme];
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [profile, setProfile] = useState<UserProfile | null>(null);
 
   useFocusEffect(
@@ -65,7 +67,7 @@ export default function HomeScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: palette.background }]}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.lg }]} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <Image

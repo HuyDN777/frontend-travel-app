@@ -1,31 +1,55 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Chip } from '@/components/ui/chip';
 import { Colors, Elevation, Radius, Spacing, Typography } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
-const PRESETS = [
-    { label: '¥100k', value: 100000 },
-    { label: '¥200k', value: 200000 },
-    { label: '¥300k', value: 300000 },
-    { label: '¥500k', value: 500000 },
-    { label: '¥1M', value: 1000000 },
-];
+function formatVND(raw: string): string {
+    const num = parseInt(raw.replace(/\D/g, ''), 10);
+    if (isNaN(num)) return '';
+    return num.toLocaleString('vi-VN');
+}
 
 export default function BudgetScreen() {
     const scheme = useColorScheme() ?? 'light';
     const palette = Colors[scheme];
     const router = useRouter();
-    const [amount, setAmount] = useState('250000');
 
-    function handlePreset(value: number) {
-        setAmount(String(value));
+    // Nhận dữ liệu từ màn tạo chuyến đi
+    const { tripName, destination, startDate, endDate } = useLocalSearchParams<{
+        tripName: string;
+        destination: string;
+        startDate: string;
+        endDate: string;
+    }>();
+
+    const [rawAmount, setRawAmount] = useState('');
+
+    function handleChangeText(text: string) {
+        const cleaned = text.replace(/\D/g, '');
+        setRawAmount(cleaned);
+    }
+
+    function handleNext() {
+        const amount = parseInt(rawAmount, 10);
+        if (!amount || amount <= 0) {
+            Alert.alert('Ngân sách không hợp lệ', 'Vui lòng nhập số tiền ngân sách.');
+            return;
+        }
+        if (!destination || !startDate || !endDate) {
+            Alert.alert('Lỗi', 'Thiếu thông tin chuyến đi. Vui lòng quay lại bước trước.');
+            return;
+        }
+        // Chuyển sang màn lịch trình với toàn bộ dữ liệu chuyến đi
+        router.push({
+            pathname: '/(tabs)/itinerary',
+            params: { tripName, destination, startDate, endDate, budget: rawAmount },
+        });
     }
 
     return (
@@ -48,7 +72,7 @@ export default function BudgetScreen() {
                 </TouchableOpacity>
                 {/* Title overlay */}
                 <View style={styles.heroBadge}>
-                    <Text style={[Typography.bodySemi, { color: '#FFF' }]}>Set Trip Budget</Text>
+                    <Text style={[Typography.bodySemi, { color: '#FFF' }]}>Thiết lập ngân sách</Text>
                 </View>
             </View>
 
@@ -60,8 +84,14 @@ export default function BudgetScreen() {
                         <Ionicons name="wallet-outline" size={28} color={palette.primary} />
                     </View>
 
+                    {destination ? (
+                        <Text style={[Typography.caption, { color: palette.textMuted, textAlign: 'center' }]}>
+                            Chuyến đi đến <Text style={{ color: palette.text, fontWeight: '700' }}>{destination}</Text>
+                        </Text>
+                    ) : null}
+
                     <Text style={[Typography.titleLG, styles.cardTitle, { color: palette.text }]}>
-                        What is your total{'\n'}budget for this trip?
+                        Tổng ngân sách{'\n'}cho chuyến đi này là bao nhiêu?
                     </Text>
 
                     {/* Amount input */}
@@ -71,32 +101,27 @@ export default function BudgetScreen() {
                             { backgroundColor: palette.background, borderColor: palette.border },
                         ]}
                     >
-                        <Text style={[styles.currencySymbol, { color: palette.textMuted }]}>¥</Text>
                         <TextInput
-                            value={amount}
-                            onChangeText={setAmount}
+                            value={formatVND(rawAmount)}
+                            onChangeText={handleChangeText}
                             keyboardType="numeric"
                             style={[styles.amountInput, { color: palette.text }]}
+                            placeholder="0"
+                            placeholderTextColor={palette.textMuted}
                         />
-                    </View>
-
-                    {/* Preset chips */}
-                    <View style={styles.presetGrid}>
-                        {PRESETS.map((p) => (
-                            <Chip
-                                key={p.label}
-                                label={p.label}
-                                selected={amount === String(p.value)}
-                                onPress={() => handlePreset(p.value)}
-                            />
-                        ))}
+                        <Text style={[styles.currencySymbol, { color: palette.textMuted }]}>₫</Text>
                     </View>
                 </View>
             </Card>
 
             {/* Next button */}
             <View style={[styles.footer, { borderTopColor: palette.border }]}>
-                <Button title="Next →" size="lg" style={styles.footerBtn} />
+                <Button
+                    title="Tiếp theo →"
+                    size="lg"
+                    style={styles.footerBtn}
+                    onPress={handleNext}
+                />
             </View>
         </View>
     );
