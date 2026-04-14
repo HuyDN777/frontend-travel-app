@@ -1,11 +1,8 @@
 import { Redirect } from 'expo-router';
 
-import { isLoggedIn } from '@/utils/session';
+import { resolveLandingRoute } from '@/utils/access-control';
+import { getSessionUser } from '@/utils/session';
 
 export default function AppEntry() {
-  if (isLoggedIn()) {
-    return <Redirect href="/(tabs)" />;
-  }
-
-  return <Redirect href="/login" />;
+  return <Redirect href={resolveLandingRoute(getSessionUser()) as '/login' | '/admin' | '/(tabs)'} />;
 }
