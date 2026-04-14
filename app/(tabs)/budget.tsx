@@ -2,7 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -54,81 +54,89 @@ export default function BudgetScreen() {
 
     return (
         <View style={[styles.root, { backgroundColor: palette.background }]}>
-            {/* Hero Image */}
-            <View style={styles.heroContainer}>
-                <Image
-                    source={{
-                        uri: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=900&q=80',
-                    }}
-                    style={styles.heroImage}
-                    contentFit="cover"
-                />
-                {/* Back button */}
-                <TouchableOpacity
-                    onPress={() => router.back()}
-                    style={[styles.backBtn, { backgroundColor: 'rgba(0,0,0,0.35)' }]}
-                >
-                    <Ionicons name="arrow-back" size={20} color="#FFF" />
-                </TouchableOpacity>
-                {/* Title overlay */}
-                <View style={styles.heroBadge}>
-                    <Text style={[Typography.bodySemi, { color: '#FFF' }]}>Thiết lập ngân sách</Text>
-                </View>
-            </View>
-
-            {/* Budget Card */}
-            <Card style={styles.card}>
-                <View style={styles.cardInner}>
-                    {/* Icon */}
-                    <View style={[styles.iconWrap, { backgroundColor: palette.background }]}>
-                        <Ionicons name="wallet-outline" size={28} color={palette.primary} />
-                    </View>
-
-                    {destination ? (
-                        <Text style={[Typography.caption, { color: palette.textMuted, textAlign: 'center' }]}>
-                            Chuyến đi đến <Text style={{ color: palette.text, fontWeight: '700' }}>{destination}</Text>
-                        </Text>
-                    ) : null}
-
-                    <Text style={[Typography.titleLG, styles.cardTitle, { color: palette.text }]}>
-                        Tổng ngân sách{'\n'}cho chuyến đi này là bao nhiêu?
-                    </Text>
-
-                    {/* Amount input */}
-                    <View
-                        style={[
-                            styles.amountWrap,
-                            { backgroundColor: palette.background, borderColor: palette.border },
-                        ]}
+            <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+                {/* Hero Image */}
+                <View style={styles.heroContainer}>
+                    <Image
+                        source={{
+                            uri: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=900&q=80',
+                        }}
+                        style={styles.heroImage}
+                        contentFit="cover"
+                    />
+                    {/* Back button */}
+                    <TouchableOpacity
+                        onPress={() => router.back()}
+                        style={[styles.backBtn, { backgroundColor: 'rgba(0,0,0,0.35)' }]}
                     >
-                        <TextInput
-                            value={formatVND(rawAmount)}
-                            onChangeText={handleChangeText}
-                            keyboardType="numeric"
-                            style={[styles.amountInput, { color: palette.text }]}
-                            placeholder="0"
-                            placeholderTextColor={palette.textMuted}
-                        />
-                        <Text style={[styles.currencySymbol, { color: palette.textMuted }]}>₫</Text>
+                        <Ionicons name="arrow-back" size={20} color="#FFF" />
+                    </TouchableOpacity>
+                    {/* Title overlay */}
+                    <View style={styles.heroBadge}>
+                        <Text style={[Typography.bodySemi, { color: '#FFF' }]}>Thiết lập ngân sách</Text>
                     </View>
                 </View>
-            </Card>
 
-            {/* Next button */}
-            <View style={[styles.footer, { borderTopColor: palette.border }]}>
-                <Button
-                    title="Tiếp theo →"
-                    size="lg"
-                    style={styles.footerBtn}
-                    onPress={handleNext}
-                />
-            </View>
+                {/* Budget Card */}
+                <View style={styles.cardContainer}>
+                    <Card style={styles.card}>
+                        <View style={styles.cardInner}>
+                            {/* Icon */}
+                            <View style={[styles.iconWrap, { backgroundColor: palette.background }]}>
+                                <Ionicons name="wallet-outline" size={28} color={palette.primary} />
+                            </View>
+
+                            {destination ? (
+                                <Text style={[Typography.caption, { color: palette.textMuted, textAlign: 'center' }]}>
+                                    Chuyến đi đến <Text style={{ color: palette.text, fontWeight: '700' }}>{destination}</Text>
+                                </Text>
+                            ) : null}
+
+                            <Text style={[Typography.titleLG, styles.cardTitle, { color: palette.text }]}>
+                                Tổng ngân sách{'\n'}cho chuyến đi này là bao nhiêu?
+                            </Text>
+
+                            {/* Amount input */}
+                            <View
+                                style={[
+                                    styles.amountWrap,
+                                    { backgroundColor: palette.background, borderColor: palette.border },
+                                ]}
+                            >
+                                <TextInput
+                                    value={formatVND(rawAmount)}
+                                    onChangeText={handleChangeText}
+                                    keyboardType="numeric"
+                                    style={[styles.amountInput, { color: palette.text }]}
+                                    placeholder="0"
+                                    placeholderTextColor={palette.textMuted}
+                                />
+                                <Text style={[styles.currencySymbol, { color: palette.textMuted }]}>₫</Text>
+                            </View>
+                        </View>
+                    </Card>
+                </View>
+
+                {/* Next button */}
+                <View style={[styles.footer, { borderTopColor: palette.border }]}>
+                    <Button
+                        title="Tiếp theo →"
+                        size="lg"
+                        style={styles.footerBtn}
+                        onPress={handleNext}
+                    />
+                </View>
+            </ScrollView>
         </View>
     );
 }
 
 const styles = StyleSheet.create({
     root: { flex: 1 },
+    scrollContent: {
+        flexGrow: 1,
+        paddingBottom: 20,
+    },
     heroContainer: {
         height: 260,
         position: 'relative',
@@ -200,15 +208,12 @@ const styles = StyleSheet.create({
         gap: Spacing.sm,
         justifyContent: 'center',
     },
+    cardContainer: {
+        flex: 1,
+    },
     footer: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
         paddingHorizontal: Spacing.lg,
-        paddingBottom: Spacing.xl,
-        paddingTop: Spacing.md,
-        borderTopWidth: 1,
+        paddingTop: Spacing.xl,
     },
     footerBtn: {
         width: '100%',

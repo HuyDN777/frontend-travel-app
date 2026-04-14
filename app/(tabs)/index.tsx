@@ -62,7 +62,19 @@ export default function ExploreScreen() {
   );
 
   const session = getSessionUser();
-  const avatar = profile?.avatarUrl || session?.avatarUrl || 'https://i.pravatar.cc/100?img=12';
+
+  const getAvatarFallback = (url: string | null | undefined): string => {
+    if (!url || typeof url !== 'string') return 'https://i.pravatar.cc/100?img=12';
+    const trimmed = url.trim();
+    if (trimmed === '' || trimmed === 'null' || trimmed === 'undefined') return 'https://i.pravatar.cc/100?img=12';
+    if (!trimmed.startsWith('http')) return 'https://i.pravatar.cc/100?img=12';
+    return trimmed;
+  };
+
+  const avatar = getAvatarFallback(profile?.avatarUrl) !== 'https://i.pravatar.cc/100?img=12'
+    ? getAvatarFallback(profile?.avatarUrl)
+    : getAvatarFallback(session?.avatarUrl);
+
   const displayName = profile?.fullName || session?.fullName || 'Bạn đồng hành';
 
   return (

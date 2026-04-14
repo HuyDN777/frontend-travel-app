@@ -5,6 +5,7 @@ import { CommunityPostCard } from '@/components/ui/community-post-card';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
+  deleteTrip,
   getMyProfile,
   getMyTrips,
   getSavedCommunityPosts,
@@ -99,6 +100,41 @@ export default function ProfileScreen() {
     'https://images.unsplash.com/photo-1510414842594-a61c69b5ae57?auto=format&fit=crop&w=900&q=80'
   ];
 
+  function handleTripOptions(trip: TripItem) {
+    const isOwner = trip.userId === profile?.id;
+
+    const options: any[] = [
+      { text: 'Hủy', style: 'cancel' },
+      { text: 'Xem chi tiết', onPress: () => router.push({ pathname: '/trip-details', params: { tripId: trip.id } }) },
+    ];
+
+    if (isOwner) {
+      options.push({ text: 'Xóa chuyến đi', style: 'destructive', onPress: () => confirmDeleteTrip(trip) });
+    }
+
+    Alert.alert('Tùy chọn', `Chuyến đi: ${trip.tripName}`, options);
+  }
+
+  function confirmDeleteTrip(trip: TripItem) {
+    Alert.alert('Xác nhận xóa', `Bạn có chắc muốn xóa chuyến đi "${trip.tripName}"? Lịch trình và thành viên sẽ bị xóa vĩnh viễn.`, [
+      { text: 'Hủy', style: 'cancel' },
+      {
+        text: 'Xóa', style: 'destructive', onPress: async () => {
+          try {
+            setLoading(true);
+            await deleteTrip(trip.id);
+            setTrips(prev => prev.filter(t => t.id !== trip.id));
+            Alert.alert('Thành công', 'Đã xóa chuyến đi.');
+          } catch (error: any) {
+            Alert.alert('Lỗi', error?.message ?? 'Không thể xóa chuyến đi.');
+          } finally {
+            setLoading(false);
+          }
+        }
+      }
+    ]);
+  }
+
   async function handleUnsave(postId: number) {
     const userId = getSessionUserId();
     if (!userId) {
@@ -130,7 +166,15 @@ export default function ProfileScreen() {
         <View style={styles.profileHeader}>
           <View style={[styles.profileInfo, { flex: 1 }]}>
             <Image
-              source={{ uri: profile?.avatarUrl || 'https://i.pravatar.cc/100?img=12' }}
+              source={{
+                uri: (() => {
+                  const url = profile?.avatarUrl;
+                  if (!url || typeof url !== 'string') return 'https://i.pravatar.cc/100?img=12';
+                  const t = url.trim();
+                  if (t === '' || t === 'null' || t === 'undefined' || !t.startsWith('http')) return 'https://i.pravatar.cc/100?img=12';
+                  return t;
+                })()
+              }}
               style={styles.avatar}
             />
             <View style={{ flex: 1 }}>
@@ -188,8 +232,10 @@ export default function ProfileScreen() {
                   </View>
                   <View style={styles.tripCardContent}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <ThemedText type="defaultSemiBold" style={{ fontSize: 18 }}>{trip.tripName}</ThemedText>
-                      <Ionicons name="ellipsis-horizontal" size={20} color={palette.textMuted} />
+                      <ThemedText type="defaultSemiBold" style={{ fontSize: 18, flex: 1 }} numberOfLines={1}>{trip.tripName}</ThemedText>
+                      <TouchableOpacity onPress={() => handleTripOptions(trip)} style={{ paddingLeft: Spacing.sm, paddingVertical: 4 }}>
+                        <Ionicons name="ellipsis-horizontal" size={20} color={palette.textMuted} />
+                      </TouchableOpacity>
                     </View>
                     <View style={[styles.tripMetaRow, { marginTop: Spacing.sm }]}>
                       <Ionicons name="calendar-outline" size={14} color={palette.textMuted} />

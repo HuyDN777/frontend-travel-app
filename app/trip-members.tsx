@@ -121,7 +121,15 @@ export default function TripMembersScreen() {
                 <Card style={styles.ownerCard}>
                     <View style={styles.memberRow}>
                         <Image
-                            source={{ uri: currentUser?.avatarUrl || 'https://i.pravatar.cc/100?img=12' }}
+                            source={{
+                                uri: (() => {
+                                    const url = currentUser?.avatarUrl;
+                                    if (!url || typeof url !== 'string') return 'https://i.pravatar.cc/100?img=12';
+                                    const t = url.trim();
+                                    if (t === '' || t === 'null' || t === 'undefined' || !t.startsWith('http')) return 'https://i.pravatar.cc/100?img=12';
+                                    return t;
+                                })()
+                            }}
                             style={styles.avatar}
                             contentFit="cover"
                         />
