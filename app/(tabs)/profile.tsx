@@ -132,8 +132,8 @@ export default function ProfileScreen() {
           </View>
 
           <View style={styles.headerBtnGroup}>
-            <Button title="Edit Profile" variant="secondary" onPress={() => router.push('/edit-profile')} />
-            {isAdmin ? <Button title="Admin Panel" variant="ghost" onPress={() => router.push('/admin-panel' as any)} /> : null}
+            <Button title="Edit" variant="secondary" size="lg" style={{ minWidth: 120, borderRadius: 24 }} onPress={() => router.push('/edit-profile')} />
+            {isAdmin ? <Button title="Admin Panel" variant="ghost" onPress={() => router.push('/admin' as any)} /> : null}
           </View>
         </View>
 

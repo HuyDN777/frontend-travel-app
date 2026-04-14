@@ -4,6 +4,7 @@ import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
+import { AccessGate } from '@/components/auth/access-gate';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
@@ -171,8 +172,9 @@ export default function EditProfileScreen() {
   }
 
   return (
-    <ThemedView style={styles.root}>
-      <Stack.Screen options={{ headerShown: false }} />
+    <AccessGate required="user">
+      <ThemedView style={styles.root}>
+        <Stack.Screen options={{ headerShown: false }} />
 
       <View style={[styles.header, { borderBottomColor: palette.border }]}>
         <Button title="Back" variant="ghost" onPress={() => router.back()} />
@@ -180,8 +182,8 @@ export default function EditProfileScreen() {
         <View style={styles.headerSpacer} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Card style={styles.form}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <Card style={styles.form}>
           <View style={styles.avatarBox}>
             <Image source={{ uri: avatarUrl || 'https://i.pravatar.cc/100?img=12' }} style={styles.avatar} contentFit="cover" />
             <View style={styles.avatarActions}>
@@ -190,9 +192,19 @@ export default function EditProfileScreen() {
             </View>
           </View>
 
-          <Input placeholder="Full Name" value={fullName} onChangeText={setFullName} />
-          <Input placeholder="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
-          <Input placeholder="Username" value={username} onChangeText={setUsername} autoCapitalize="none" />
+
+          <View style={{ marginBottom: 8 }}>
+            <ThemedText style={{ marginBottom: 4, color: '#A6A29A', fontSize: 14 }}>Họ và tên</ThemedText>
+            <Input placeholder="Nhập họ và tên" value={fullName} onChangeText={setFullName} />
+          </View>
+          <View style={{ marginBottom: 8 }}>
+            <ThemedText style={{ marginBottom: 4, color: '#A6A29A', fontSize: 14 }}>Email</ThemedText>
+            <Input placeholder="Nhập email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
+          </View>
+          <View style={{ marginBottom: 8 }}>
+            <ThemedText style={{ marginBottom: 4, color: '#A6A29A', fontSize: 14 }}>Tên đăng nhập</ThemedText>
+            <Input placeholder="Nhập tên đăng nhập" value={username} onChangeText={setUsername} autoCapitalize="none" />
+          </View>
 
           <Pressable onPress={() => setShowPasswordForm((prev) => !prev)}>
             <ThemedText type="defaultSemiBold">Change Password</ThemedText>
@@ -210,7 +222,7 @@ export default function EditProfileScreen() {
             </>
           ) : null}
 
-          <Button title="Save Changes" size="lg" onPress={handleSave} loading={loading} />
+          <Button title="Lưu thay đổi" size="lg" onPress={handleSave} loading={loading} />
           <Button
             title="Dang xuat"
             variant="ghost"
@@ -219,9 +231,10 @@ export default function EditProfileScreen() {
               router.replace('/login');
             }}
           />
-        </Card>
-      </ScrollView>
-    </ThemedView>
+          </Card>
+        </ScrollView>
+      </ThemedView>
+    </AccessGate>
   );
 }
 
