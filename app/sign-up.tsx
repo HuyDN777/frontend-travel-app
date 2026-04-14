@@ -1,8 +1,9 @@
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
+import { AccessGate } from '@/components/auth/access-gate';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
@@ -166,21 +167,32 @@ export default function SignUpScreen() {
   }
 
   return (
-    <ThemedView style={styles.root}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Card padded={false} style={styles.heroCard}>
-          <Image
-            source={{ uri: 'https://images.unsplash.com/photo-1528164344705-47542687000d?auto=format&fit=crop&w=1200&q=80' }}
-            style={styles.heroImage}
-            contentFit="cover"
-          />
-        </Card>
+    <AccessGate required="guest">
+      <ThemedView style={styles.root}>
+        <KeyboardAvoidingView
+          style={styles.keyboardContainer}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
+        >
+          <ScrollView
+            contentContainerStyle={styles.content}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          >
+            <Card padded={false} style={styles.heroCard}>
+              <Image
+                source={{ uri: 'https://images.unsplash.com/photo-1528164344705-47542687000d?auto=format&fit=crop&w=1200&q=80' }}
+                style={styles.heroImage}
+                contentFit="cover"
+              />
+            </Card>
 
-        <View style={styles.form}>
-          <ThemedText type="title" style={styles.title}>
-            Tạo tài khoản
-          </ThemedText>
-          <ThemedText style={{ color: palette.textMuted }}>Bắt đầu hành trình của bạn hôm nay</ThemedText>
+            <View style={styles.form}>
+              <ThemedText type="title" style={styles.title}>
+                Tạo tài khoản
+              </ThemedText>
+              <ThemedText style={{ color: palette.textMuted }}>Bắt đầu hành trình của bạn hôm nay</ThemedText>
 
           <Input
             placeholder="Nhập họ và tên"
@@ -221,7 +233,7 @@ export default function SignUpScreen() {
               onPress={handleSendOtp}
               loading={sendingOtp}
               disabled={loading || verifyingOtp || sendingOtp || resendCooldown > 0}
-              style={[styles.inlineButton, resendCooldown > 0 && styles.disabledInlineButton]}
+              style={resendCooldown > 0 ? [styles.inlineButton, styles.disabledInlineButton] : styles.inlineButton}
               size="md"
             />
           </View>
@@ -297,20 +309,26 @@ export default function SignUpScreen() {
             />
           </View>
 
-          <Pressable onPress={() => router.replace('/login')} disabled={loading}>
-            <ThemedText style={[styles.switchText, { color: palette.primary }]}>
-              Đã có tài khoản? Đăng nhập
-            </ThemedText>
-          </Pressable>
-        </View>
-      </ScrollView>
-    </ThemedView>
+              <Pressable onPress={() => router.replace('/login')} disabled={loading}>
+                <ThemedText style={[styles.switchText, { color: palette.primary }]}>
+                  Đã có tài khoản? Đăng nhập
+                </ThemedText>
+              </Pressable>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </ThemedView>
+    </AccessGate>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  keyboardContainer: {
+    flex: 1,
+  },
   content: {
+    flexGrow: 1,
     paddingBottom: moderateScale(40),
   },
   heroCard: {
