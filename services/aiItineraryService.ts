@@ -79,6 +79,460 @@ function resolveAiBaseUrl(): string | undefined {
 
 const API_BASE_URL = resolveAiBaseUrl();
 
+function resolveSerpApiKey(): string | undefined {
+  const env =
+    typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_SERPAPI_KEY
+      ? String(process.env.EXPO_PUBLIC_SERPAPI_KEY).trim()
+      : '';
+  if (env) return env;
+
+  const extra = (Constants.expoConfig?.extra as { serpApiKey?: string } | undefined)?.serpApiKey?.trim();
+  if (extra) return extra;
+
+  return undefined;
+}
+
+const SERPAPI_KEY = resolveSerpApiKey();
+const SERPAPI_SEARCH_URL = 'https://serpapi.com/search.json';
+
+function resolveLlmConfig(): { baseUrl: string; apiKey?: string; model: string } | null {
+  const baseUrl =
+    typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_LLM_BASE_URL
+      ? String(process.env.EXPO_PUBLIC_LLM_BASE_URL).trim()
+      : '';
+  const apiKey =
+    typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_LLM_API_KEY
+      ? String(process.env.EXPO_PUBLIC_LLM_API_KEY).trim()
+      : '';
+  const model =
+    typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_LLM_MODEL
+      ? String(process.env.EXPO_PUBLIC_LLM_MODEL).trim()
+      : '';
+
+  const extra = Constants.expoConfig?.extra as
+    | { llmBaseUrl?: string; llmApiKey?: string; llmModel?: string }
+    | undefined;
+
+  const resolvedBaseUrl = baseUrl || extra?.llmBaseUrl?.trim() || '';
+  const resolvedModel = model || extra?.llmModel?.trim() || 'gpt-4o-mini';
+  const resolvedApiKey = apiKey || extra?.llmApiKey?.trim() || '';
+
+  if (!resolvedBaseUrl && !resolvedApiKey) return null;
+
+  return {
+    baseUrl: resolvedBaseUrl || 'https://api.openai.com/v1',
+    apiKey: resolvedApiKey || undefined,
+    model: resolvedModel,
+  };
+}
+
+const LLM_CONFIG = resolveLlmConfig();
+
+type SerpApiLocalResult = LocalResult & {
+  place_id?: string;
+  serpapi_thumbnail?: string;
+  hours?: string;
+  price?: string;
+  type?: string;
+  title?: string;
+  name?: string;
+  address?: string;
+};
+
+type SerpApiResponse = {
+  local_results?: SerpApiLocalResult[];
+};
+
+type ChatMessage = {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+};
+
+function buildSerpApiQuery(destination: string, category: 'tourism' | 'restaurant' | 'cafe'): string {
+  const cleanDestination = destination.trim();
+  if (category === 'tourism') return `tourist attractions in ${cleanDestination}`;
+  if (category === 'cafe') return `cafes in ${cleanDestination}`;
+  return `restaurants in ${cleanDestination}`;
+}
+
+function buildSearchContextLine(category: 'tourism' | 'restaurant' | 'cafe', items: LocalResult[]): string {
+  const label = category === 'tourism' ? 'Địa điểm tham quan' : category === 'cafe' ? 'Cafe' : 'Nhà hàng';
+  if (items.length === 0) return `${label}: không có dữ liệu.`;
+
+  return `${label}:\n${items
+    .slice(0, 8)
+    .map((item, index) => {
+      const parts = [
+        `${index + 1}. ${item.title}`,
+        item.type ? `loại=${item.type}` : '',
+        item.address ? `địa chỉ=${item.address}` : '',
+        typeof item.rating === 'number' ? `rating=${item.rating}` : '',
+        typeof item.reviews === 'number' ? `reviews=${item.reviews}` : '',
+        item.description ? `mô tả=${item.description}` : '',
+      ].filter(Boolean);
+      return parts.join(' | ');
+    })
+    .join('\n')}`;
+}
+
+function extractJsonPayload(text: string): string | null {
+  const trimmed = text.trim();
+  const fenced = trimmed.match(/```json\s*([\s\S]*?)\s*```/i) ?? trimmed.match(/```\s*([\s\S]*?)\s*```/i);
+  if (fenced?.[1]) return fenced[1].trim();
+
+  const first = trimmed.indexOf('{');
+  const last = trimmed.lastIndexOf('}');
+  if (first >= 0 && last > first) {
+    return trimmed.slice(first, last + 1);
+  }
+  return null;
+}
+
+function normalizeDayLabel(req: AiItineraryRequest, dayIndex: number, rawLabel?: string): string {
+  const fallback = req.startDate ? formatDayLabel(req.startDate, dayIndex - 1) : `Ngày ${dayIndex}`;
+  const label = String(rawLabel ?? '').trim();
+  return label || fallback;
+}
+
+function normalizeSuggestedActivity(dayIndex: number, index: number, item: Partial<SuggestedActivity> & Record<string, unknown>): SuggestedActivity {
+  const title = String(item.title ?? item.name ?? `Hoạt động ${index + 1}`).trim();
+  const estimatedDuration = String(item.estimatedDuration ?? item.duration ?? '2h').trim() || '2h';
+  return {
+    id: String(item.id ?? id('act', dayIndex, index)),
+    title,
+    description: String(item.description ?? item.note ?? '').trim() || undefined,
+    estimatedDuration,
+    suggestedStart: String(item.suggestedStart ?? item.startTime ?? '').trim() || undefined,
+    address: String(item.address ?? '').trim() || undefined,
+    type: String(item.type ?? '').trim() || undefined,
+    hours: String(item.hours ?? '').trim() || undefined,
+    priceRange: String(item.priceRange ?? '').trim() || undefined,
+    rating: typeof item.rating === 'number' ? item.rating : undefined,
+    reviews: typeof item.reviews === 'number' ? item.reviews : undefined,
+    thumbnail: String(item.thumbnail ?? '').trim() || undefined,
+    mapLink: String(item.mapLink ?? '').trim() || undefined,
+  };
+}
+
+function normalizeSuggestedRestaurant(dayIndex: number, index: number, item: Partial<SuggestedRestaurant> & Record<string, unknown>): SuggestedRestaurant {
+  const name = String(item.name ?? item.title ?? `Nhà hàng ${index + 1}`).trim();
+  return {
+    id: String(item.id ?? id('rest', dayIndex, index)),
+    name,
+    note: String(item.note ?? '').trim() || undefined,
+    description: String(item.description ?? '').trim() || undefined,
+    address: String(item.address ?? '').trim() || undefined,
+    type: String(item.type ?? '').trim() || undefined,
+    hours: String(item.hours ?? '').trim() || undefined,
+    priceRange: String(item.priceRange ?? '').trim() || undefined,
+    rating: typeof item.rating === 'number' ? item.rating : undefined,
+    reviews: typeof item.reviews === 'number' ? item.reviews : undefined,
+    thumbnail: String(item.thumbnail ?? '').trim() || undefined,
+    mapLink: String(item.mapLink ?? '').trim() || undefined,
+  };
+}
+
+function normalizeAiItineraryResponse(data: unknown, req: AiItineraryRequest): AiItineraryResponse | null {
+  if (!data || typeof data !== 'object') return null;
+  const raw = data as Record<string, unknown>;
+  const rawDays = Array.isArray(raw.days) ? raw.days : [];
+
+  const days = rawDays
+    .map((day, dayIndex) => {
+      if (!day || typeof day !== 'object') return null;
+      const d = day as Record<string, unknown>;
+      const dayNumber = typeof d.dayIndex === 'number' ? d.dayIndex : dayIndex + 1;
+      const activities = Array.isArray(d.activities)
+        ? d.activities.map((item, index) => normalizeSuggestedActivity(dayNumber, index, item as Record<string, unknown>))
+        : [];
+      const restaurants = Array.isArray(d.restaurants)
+        ? d.restaurants.map((item, index) => normalizeSuggestedRestaurant(dayNumber, index, item as Record<string, unknown>))
+        : [];
+
+      return {
+        dayIndex: dayNumber,
+        label: normalizeDayLabel(req, dayNumber, typeof d.label === 'string' ? d.label : undefined),
+        activities: activities.length > 0 ? activities : [{
+          id: id('act', dayNumber, 0),
+          title: `Khám phá ${req.destination}`,
+          description: 'Gợi ý dự phòng do LLM không trả đủ hoạt động.',
+          estimatedDuration: '2h',
+        }],
+        restaurants: restaurants.length > 0 ? restaurants : [{
+          id: id('rest', dayNumber, 0),
+          name: `Đặc sản ${req.destination}`,
+          note: 'Gợi ý dự phòng do LLM không trả đủ nhà hàng.',
+        }],
+      } satisfies SuggestedDay;
+    })
+    .filter((day): day is SuggestedDay => Boolean(day));
+
+  if (days.length === 0) return null;
+
+  return {
+    summary: typeof raw.summary === 'string' ? raw.summary.trim() : '',
+    days,
+    generatedAt: typeof raw.generatedAt === 'string' && raw.generatedAt.trim() ? raw.generatedAt : new Date().toISOString(),
+  };
+}
+
+async function callOpenAiCompatibleChat(messages: ChatMessage[]): Promise<string | null> {
+  if (!LLM_CONFIG) return null;
+
+  const baseUrl = LLM_CONFIG.baseUrl.replace(/\/$/, '');
+  const endpoint = `${baseUrl}/chat/completions`;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (LLM_CONFIG.apiKey) {
+    headers.Authorization = `Bearer ${LLM_CONFIG.apiKey}`;
+  }
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model: LLM_CONFIG.model,
+        messages,
+        temperature: 0.4,
+      }),
+    });
+    if (!response.ok) return null;
+
+    const payload = (await response.json()) as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+    const content = payload.choices?.[0]?.message?.content?.trim();
+    return content || null;
+  } catch {
+    return null;
+  }
+}
+
+function buildRagPrompt(req: AiItineraryRequest, tourism: LocalResult[], restaurants: LocalResult[], cafes: LocalResult[], knowledge: TourismItem[]): ChatMessage[] {
+  const prefLine = req.preferences.length ? req.preferences.join(', ') : 'đa dạng';
+  const budgetLine = req.budgetTier === 'low' ? 'tiết kiệm' : req.budgetTier === 'high' ? 'thoải mái' : 'vừa phải';
+  const knowledgeLine = knowledge.length
+    ? knowledge.slice(0, 6).map((item, index) => `${index + 1}. ${item.title} — ${item.paragraphs[0]?.context.slice(0, 180) ?? ''}`).join('\n')
+    : 'Không có mục tri thức cục bộ phù hợp.';
+
+  return [
+    {
+      role: 'system',
+      content:
+        'Bạn là trợ lý du lịch tiếng Việt. Nhiệm vụ của bạn là tạo lịch trình ngắn gọn, thực tế, không bịa dữ liệu ngoài ngữ cảnh truy xuất. Trả về CHỈ JSON hợp lệ theo schema: {"summary": string, "days": [{"dayIndex": number, "label": string, "activities": [...], "restaurants": [...]}], "generatedAt": string}. Mỗi activity phải có title, description, estimatedDuration, suggestedStart nếu có; mỗi restaurant phải có name và note. Không thêm markdown.',
+    },
+    {
+      role: 'user',
+      content: `
+Điểm đến: ${req.destination}
+Số ngày: ${req.dayCount}
+Ngân sách: ${budgetLine}
+Sở thích: ${prefLine}
+Ngày bắt đầu: ${req.startDate ?? 'không có'}
+
+Ngữ cảnh truy xuất từ SerpApi:
+${buildSearchContextLine('tourism', tourism)}
+
+${buildSearchContextLine('cafe', cafes)}
+
+${buildSearchContextLine('restaurant', restaurants)}
+
+Ngữ cảnh knowledge base:
+${knowledgeLine}
+
+Yêu cầu:
+- Ưu tiên địa điểm thực tế trong ngữ cảnh trên.
+- Mỗi ngày 2-4 hoạt động, 1-2 nhà hàng/cafe.
+- Nếu có quán cafe phù hợp thì dùng cho bữa nghỉ/chill.
+- Nếu thiếu dữ liệu, vẫn tạo lịch trình hợp lý nhưng không bịa địa chỉ cụ thể.
+- Viết tiếng Việt tự nhiên, rõ ràng, phù hợp người dùng phổ thông.
+`.trim(),
+    },
+  ];
+}
+
+async function buildResponseFromLlm(req: AiItineraryRequest): Promise<AiItineraryResponse | null> {
+  if (!LLM_CONFIG) return null;
+
+  const dest = req.destination.trim();
+  const [tourism, restaurants, cafes, knowledge] = await Promise.all([
+    fetchSerpApiLocalResults(dest, 'tourism'),
+    fetchSerpApiLocalResults(dest, 'restaurant'),
+    fetchSerpApiLocalResults(dest, 'cafe'),
+    searchKnowledge(dest, req.preferences),
+  ]);
+
+  const content = await callOpenAiCompatibleChat(buildRagPrompt(req, tourism, restaurants, cafes, knowledge));
+  if (!content) return null;
+
+  const jsonText = extractJsonPayload(content);
+  if (!jsonText) return null;
+
+  try {
+    const parsed = JSON.parse(jsonText) as unknown;
+    return normalizeAiItineraryResponse(parsed, req);
+  } catch {
+    return null;
+  }
+}
+
+function normalizeSerpApiResult(item: SerpApiLocalResult, fallbackTitle: string): LocalResult {
+  const title = String(item.title ?? item.name ?? fallbackTitle).trim() || fallbackTitle;
+  return {
+    title,
+    rating: typeof item.rating === 'number' ? item.rating : undefined,
+    reviews: typeof item.reviews === 'number' ? item.reviews : undefined,
+    description: item.description ?? item.type ?? undefined,
+    type: item.type ?? undefined,
+    address: item.address ?? undefined,
+    thumbnail: item.thumbnail ?? item.serpapi_thumbnail ?? undefined,
+    place_id: item.place_id ?? undefined,
+    gps_coordinates: item.gps_coordinates ?? undefined,
+  };
+}
+
+async function fetchSerpApiLocalResults(
+  destination: string,
+  category: 'tourism' | 'restaurant' | 'cafe',
+  query?: string,
+): Promise<LocalResult[]> {
+  if (!SERPAPI_KEY) return [];
+
+  const searchParams = new URLSearchParams({
+    engine: 'google_maps',
+    q: query?.trim() || buildSerpApiQuery(destination, category),
+    hl: 'vi',
+    gl: 'vn',
+    api_key: SERPAPI_KEY,
+  });
+
+  try {
+    const response = await fetch(`${SERPAPI_SEARCH_URL}?${searchParams.toString()}`);
+    if (!response.ok) return [];
+
+    const payload = (await response.json()) as SerpApiResponse;
+    const items = Array.isArray(payload.local_results) ? payload.local_results : [];
+    return items
+      .map((item) => normalizeSerpApiResult(item, destination))
+      .filter((item) => Boolean(item.title?.trim()));
+  } catch {
+    return [];
+  }
+}
+
+function placeTypeLabel(category: 'tourism' | 'restaurant' | 'cafe', place: LocalResult): string {
+  if (place.type?.trim()) return place.type.trim();
+  if (category === 'tourism') return 'Điểm tham quan';
+  if (category === 'cafe') return 'Quán cafe';
+  return 'Nhà hàng';
+}
+
+function toSuggestedActivity(dayIndex: number, index: number, place: LocalResult, destination: string): SuggestedActivity {
+  return {
+    id: id('act', dayIndex, index),
+    title: place.title,
+    description: place.description || `${placeTypeLabel('tourism', place)} tại ${destination}`,
+    estimatedDuration: index === 0 ? '2–3h' : index === 1 ? '1.5–2h' : '1–2h',
+    suggestedStart: index === 0 ? '08:30' : index === 1 ? '10:30' : index === 2 ? '14:30' : '16:30',
+    address: place.address,
+    type: place.type,
+    rating: place.rating,
+    reviews: place.reviews,
+    thumbnail: place.thumbnail,
+    mapLink: getMapLink(place.title, place.place_id),
+  };
+}
+
+function toSuggestedRestaurant(
+  dayIndex: number,
+  index: number,
+  place: LocalResult,
+  category: 'restaurant' | 'cafe',
+): SuggestedRestaurant {
+  const label = placeTypeLabel(category, place);
+  return {
+    id: id('rest', dayIndex, index),
+    name: place.title,
+    note: place.description || label,
+    description: place.description,
+    address: place.address,
+    type: label,
+    hours: undefined,
+    priceRange: undefined,
+    rating: place.rating,
+    reviews: place.reviews,
+    thumbnail: place.thumbnail,
+    mapLink: getMapLink(place.title, place.place_id),
+  };
+}
+
+function buildDailyResults(
+  req: AiItineraryRequest,
+  tourism: LocalResult[],
+  restaurants: LocalResult[],
+  cafes: LocalResult[],
+): AiItineraryResponse {
+  const dest = req.destination.trim();
+  const vegetarian = req.preferences.some((p) => /chay|vegetarian|vegan/i.test(p));
+  const maxDays = Math.min(req.dayCount, 14);
+  const foodPool = vegetarian ? [...cafes, ...restaurants] : [...restaurants, ...cafes];
+  const fallbackBudget = req.budgetTier === 'low' ? 'tiết kiệm' : req.budgetTier === 'high' ? 'thoải mái' : 'vừa phải';
+
+  const days: SuggestedDay[] = [];
+  for (let d = 1; d <= maxDays; d++) {
+    const activitySlice = tourism.slice((d - 1) * 3, (d - 1) * 3 + 3);
+    const activities = activitySlice.map((place, idx) => toSuggestedActivity(d, idx, place, dest));
+
+    const restaurantSlice = foodPool.slice((d - 1) * 2, (d - 1) * 2 + 2);
+    const mappedFood = restaurantSlice.map((place, idx) => {
+      const category = cafes.includes(place) ? 'cafe' : 'restaurant';
+      return toSuggestedRestaurant(d, idx, place, category);
+    });
+
+    if (activities.length === 0) {
+      activities.push({
+        id: id('act', d, 0),
+        title: `Khám phá ${dest}`,
+        description: `Buổi sáng: dạo quanh trung tâm, ưu tiên ${fallbackBudget}.`,
+        estimatedDuration: '2–3h',
+        suggestedStart: '09:00',
+      });
+    }
+
+    if (mappedFood.length === 0) {
+      mappedFood.push(
+        vegetarian
+          ? {
+              id: id('rest', d, 0),
+              name: 'Quán chay địa phương',
+              note: 'Hỏi khu vực trung tâm hoặc gần khách sạn',
+            }
+          : {
+              id: id('rest', d, 0),
+              name: `Đặc sản ${dest}`,
+              note: 'Ưu tiên quán có đánh giá tốt trên bản đồ',
+            },
+      );
+    }
+
+    days.push({
+      dayIndex: d,
+      label: req.startDate ? formatDayLabel(req.startDate, d - 1) : `Ngày ${d}`,
+      activities,
+      restaurants: mappedFood,
+    });
+  }
+
+  const prefLine = req.preferences.length ? req.preferences.join(', ') : 'đa dạng';
+  const budgetVi = req.budgetTier === 'low' ? 'tiết kiệm' : req.budgetTier === 'high' ? 'thoải mái' : 'vừa phải';
+
+  return {
+    summary: `Chào Hà! Mình đã tổng hợp gợi ý ${req.dayCount} ngày tại ${dest} từ SerpApi. Ngân sách: ${budgetVi}, sở thích: ${prefLine}.`,
+    days,
+    generatedAt: new Date().toISOString(),
+  };
+}
+
 function delay(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
@@ -299,7 +753,7 @@ function getMapLink(title: string, placeId?: string): string {
 }
 
 /**
- * Tạo phản hồi từ dữ liệu thực trong JSON.
+ * Tạo phản hồi từ dữ liệu nội bộ khi không có SerpApi hoặc cần fallback cục bộ.
  */
 async function buildResponseFromKnowledge(req: AiItineraryRequest): Promise<AiItineraryResponse> {
   const dest = req.destination.trim();
@@ -447,11 +901,37 @@ async function buildResponseFromKnowledge(req: AiItineraryRequest): Promise<AiIt
   };
 }
 
+async function buildResponseFromSerpApi(req: AiItineraryRequest): Promise<AiItineraryResponse> {
+  const dest = req.destination.trim();
+  const [tourism, restaurants, cafes] = await Promise.all([
+    fetchSerpApiLocalResults(dest, 'tourism'),
+    fetchSerpApiLocalResults(dest, 'restaurant'),
+    fetchSerpApiLocalResults(dest, 'cafe'),
+  ]);
+
+  if (tourism.length === 0 && restaurants.length === 0 && cafes.length === 0) {
+    return buildResponseFromKnowledge(req);
+  }
+
+  return buildDailyResults(req, tourism, restaurants, cafes);
+}
+
 
 /**
  * Gọi backend AI nếu có EXPO_PUBLIC_AI_ITINERARY_URL; ngược lại dùng mock có cấu trúc giống contract API.
  */
 export async function requestAiItinerary(req: AiItineraryRequest): Promise<AiItineraryResponse> {
+  const llmResponse = await buildResponseFromLlm(req);
+  if (llmResponse) return llmResponse;
+
+  if (SERPAPI_KEY) {
+    try {
+      return await buildResponseFromSerpApi(req);
+    } catch {
+      // Tiếp tục fallback bên dưới.
+    }
+  }
+
   if (API_URL) {
     try {
       const res = await fetch(API_URL, {
@@ -478,6 +958,11 @@ export async function requestCityDataSuggestions(
   category: 'tourism' | 'restaurant' | 'cafe',
   query?: string,
 ): Promise<LocalResult[]> {
+  if (SERPAPI_KEY) {
+    const serpResults = await fetchSerpApiLocalResults(destination, category, query);
+    if (serpResults.length > 0) return serpResults;
+  }
+
   if (!API_BASE_URL) return [];
 
   const params = new URLSearchParams({ destination, category });
@@ -489,4 +974,36 @@ export async function requestCityDataSuggestions(
   if (!res.ok) return [];
   const data = (await res.json()) as LocalResult[];
   return Array.isArray(data) ? data : [];
+}
+
+export interface AiChatRequest {
+  message: string;
+  sessionId?: number;
+  userId?: number;
+}
+
+export interface AiChatResponse {
+  reply: string;
+  sessionId: number;
+}
+
+/**
+ * Gọi API Chat tự do (Gemini + RAG) từ Backend.
+ */
+export async function requestAiChat(req: AiChatRequest): Promise<AiChatResponse> {
+  if (!API_BASE_URL) {
+    throw new Error('Chưa cấu hình API_BASE_URL');
+  }
+
+  const res = await fetch(`${API_BASE_URL}/api/v1/ai/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+
+  if (!res.ok) {
+    throw new Error(`AI chat HTTP ${res.status}`);
+  }
+
+  return (await res.json()) as AiChatResponse;
 }

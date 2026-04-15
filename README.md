@@ -38,14 +38,14 @@ flowchart LR
 ## Công nghệ
 
 | Lớp | Công nghệ |
-|-----|-----------|
+| --- | --- |
 | Frontend | React Native 0.81, Expo SDK 54, Expo Router, TypeScript |
 | UI | Component tái sử dụng (`Button`, `Card`, `Input`), theme sáng/tối |
 | Backend (tham chiếu báo cáo) | Spring Boot REST, MySQL |
 
 ## Cấu trúc thư mục (phần liên quan BTL)
 
-```
+```text
 app/
   ai-itinerary.tsx      # Luồng UC: gợi ý AI → duyệt → áp dụng DayPlan
   (tabs)/index.tsx      # Điều hướng vào màn AI
@@ -73,6 +73,18 @@ Mở bằng Expo Go, emulator hoặc `w` cho web. Trên **Trang chủ**, chọn 
 3. Backend trả về JSON đúng schema trong `types/aiItinerary.ts` (xem thêm **`BAO_CAO_PHAN_4.md`**).
 
 Nếu **không** đặt URL, app tự dùng **mock** để demo và quay video báo cáo.
+
+## Tích hợp SerpApi cho chatbot
+
+1. Sao chép `.env.example` thành `.env` và điền `EXPO_PUBLIC_SERPAPI_KEY`.
+2. Chatbot AI sẽ ưu tiên dùng SerpApi để lấy gợi ý địa điểm tham quan, quán cafe và nhà hàng.
+3. Nếu không có khóa SerpApi, app vẫn chạy bằng dữ liệu nội bộ / backend như trước.
+
+## Tích hợp LLM cho chatbot
+
+1. Điền thêm `EXPO_PUBLIC_LLM_BASE_URL`, `EXPO_PUBLIC_LLM_API_KEY` và `EXPO_PUBLIC_LLM_MODEL` trong `.env`.
+2. Bot sẽ dùng ngữ cảnh truy xuất từ SerpApi và knowledge base rồi nhờ LLM sinh lịch trình JSON.
+3. Nếu chưa cấu hình LLM, app tự fallback sang luồng SerpApi hoặc dữ liệu nội bộ hiện có.
 
 ## Tài liệu kèm báo cáo
 

@@ -25,7 +25,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Colors, Elevation, Radius, Spacing, Typography } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { requestAiItinerary, requestCityDataSuggestions } from '@/services/aiItineraryService';
+import { requestAiItinerary, requestCityDataSuggestions, requestAiChat } from '@/services/aiItineraryService';
 import { searchCityData } from '@/services/knowledgeService';
 import { applyDayPlansToDraft } from '@/stores/planDraftStore';
 import type {
@@ -238,6 +238,7 @@ export default function AiItineraryScreen() {
   const [prefs, setPrefs] = useState<string[]>(['food', 'beach']);
   const [budgetTier, setBudgetTier] = useState<BudgetTier>('medium');
   const [startDate, setStartDate] = useState('');
+  const [sessionId, setSessionId] = useState<number | undefined>(undefined);
 
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AiItineraryResponse | null>(null);
@@ -516,12 +517,27 @@ export default function AiItineraryScreen() {
     }
 
     // If everything is basically filled or user seems done
-    goConfirm("Ghi nhận thông tin", { 
-      dest: updatedDest, 
-      days: updatedDays, 
-      budget: updatedBudget, 
-      prefs: updatedPrefs 
-    });
+    if (updatedDest && updatedDays && updatedDays !== '0') {
+      goConfirm("Ghi nhận thông tin", { 
+        dest: updatedDest, 
+        days: updatedDays, 
+        budget: updatedBudget, 
+        prefs: updatedPrefs 
+      });
+      return;
+    }
+
+    // 5. Fallback: If not a parameter collection step, send to Gemini Chat
+    setLoading(true);
+    try {
+      const chatRes = await requestAiChat({ message: raw, sessionId });
+      if (chatRes.sessionId) setSessionId(chatRes.sessionId);
+      append('assistant', chatRes.reply);
+    } catch (e) {
+      append('assistant', "Xin lỗi Hà, mình đang gặp chút trục trặc khi kết nối với AI.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDestination = (city: string) => {
@@ -745,13 +761,43 @@ export default function AiItineraryScreen() {
                   : { backgroundColor: palette.surface, borderColor: palette.border, borderWidth: 1 },
               ]}
             >
-              <Text
+              <View
                 style={[
                   Typography.body,
                   { color: m.role === 'user' ? '#FFF' : palette.text },
                 ]}
               >
-                {m.text.split(/(\*\*[^*]+\*\*)/g).map((part, i) => {
+                {m.text.split(/(\[PLACE:[^\]]+\]|\*\*[^*]+\*\*)/g).map((part, i) => {
+                  if (part.startsWith('[PLACE:') && part.endsWith(']')) {
+                    // Render Rich Card
+                    const content = part.slice(7, -1);
+                    const [title, img, rating, desc] = content.split('|').map(s => s.trim());
+                    
+                    return (
+                      <View key={i} style={[styles.richCard, { backgroundColor: palette.surfaceMuted, borderColor: palette.border }]}>
+                        {img ? (
+                          <Image source={{ uri: img }} style={styles.richCardImg} />
+                        ) : (
+                          <View style={[styles.richCardImg, { backgroundColor: palette.primary + '20', alignItems: 'center', justifyContent: 'center' }]}>
+                            <Ionicons name="image-outline" size={24} color={palette.primary} />
+                          </View>
+                        )}
+                        <View style={styles.richCardContent}>
+                          <Text style={[Typography.bodySemi, { color: palette.text }]}>{title}</Text>
+                          <View style={styles.ratingRow}>
+                            <Ionicons name="star" size={14} color="#F1C40F" />
+                            <Text style={[Typography.caption, { color: palette.text, marginLeft: 4, fontWeight: '700' }]}>
+                              {rating || 'N/A'}
+                            </Text>
+                          </View>
+                          <Text style={[Typography.caption, { color: palette.textMuted, marginTop: 2 }]} numberOfLines={2}>
+                            {desc}
+                          </Text>
+                        </View>
+                      </View>
+                    );
+                  }
+
                   const bold = part.startsWith('**') && part.endsWith('**');
                   const inner = bold ? part.slice(2, -2) : part;
                   return bold ? (
@@ -762,7 +808,7 @@ export default function AiItineraryScreen() {
                     <Text key={i}>{inner}</Text>
                   );
                 })}
-              </Text>
+              </View>
             </View>
           </View>
         ))}
@@ -1396,5 +1442,23 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm,
     paddingHorizontal: Spacing.lg,
     borderRadius: Radius.lg,
+  },
+  richCard: {
+    flexDirection: 'row',
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    padding: Spacing.sm,
+    marginVertical: Spacing.sm,
+    overflow: 'hidden',
+  },
+  richCardImg: {
+    width: 80,
+    height: 80,
+    borderRadius: Radius.md,
+  },
+  richCardContent: {
+    flex: 1,
+    marginLeft: Spacing.md,
+    justifyContent: 'center',
   },
 });
