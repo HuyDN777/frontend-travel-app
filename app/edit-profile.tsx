@@ -12,7 +12,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { getMyProfile, updateMyProfile, uploadAvatar } from '@/utils/api';
+import { getMyProfile, resolveMediaUrl, updateMyProfile, uploadAvatar } from '@/utils/api';
 import { moderateScale } from '@/utils/responsive';
 import { clearSessionUser, getSessionUser, getSessionUserId, setSessionUser } from '@/utils/session';
 
@@ -25,6 +25,7 @@ export default function EditProfileScreen() {
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
+  const [selectedAvatarUri, setSelectedAvatarUri] = useState('');
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -45,28 +46,7 @@ export default function EditProfileScreen() {
     const uri = result.assets?.[0]?.uri;
     if (!uri) return;
 
-    const userId = getSessionUserId();
-    if (!userId) {
-      router.replace('/login');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const uploaded = await uploadAvatar(uri, userId);
-      setAvatarUrl(uploaded.avatarUrl);
-      const session = getSessionUser();
-      if (session) {
-        setSessionUser({
-          ...session,
-          avatarUrl: uploaded.avatarUrl,
-        });
-      }
-    } catch (error: any) {
-      Alert.alert('Lỗi', error?.message ?? 'Không thể cập nhật ảnh đại diện');
-    } finally {
-      setLoading(false);
-    }
+    setSelectedAvatarUri(uri);
   }
 
   async function handleTakeAvatarPhoto() {
@@ -84,28 +64,7 @@ export default function EditProfileScreen() {
     const uri = result.assets?.[0]?.uri;
     if (!uri) return;
 
-    const userId = getSessionUserId();
-    if (!userId) {
-      router.replace('/login');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const uploaded = await uploadAvatar(uri, userId);
-      setAvatarUrl(uploaded.avatarUrl);
-      const session = getSessionUser();
-      if (session) {
-        setSessionUser({
-          ...session,
-          avatarUrl: uploaded.avatarUrl,
-        });
-      }
-    } catch (error: any) {
-      Alert.alert('Lỗi', error?.message ?? 'Không thể cập nhật ảnh đại diện');
-    } finally {
-      setLoading(false);
-    }
+    setSelectedAvatarUri(uri);
   }
 
   useEffect(() => {
@@ -125,6 +84,7 @@ export default function EditProfileScreen() {
         setEmail(profile.email ?? '');
         setUsername(profile.username ?? '');
         setAvatarUrl(profile.avatarUrl ?? '');
+        setSelectedAvatarUri('');
       } catch (error: any) {
         Alert.alert('Lỗi', error?.message ?? 'Không tải được hồ sơ');
       } finally {
@@ -146,11 +106,16 @@ export default function EditProfileScreen() {
 
     try {
       setLoading(true);
+      let nextAvatarUrl = avatarUrl;
+      if (selectedAvatarUri.trim()) {
+        const uploaded = await uploadAvatar(selectedAvatarUri, userId);
+        nextAvatarUrl = uploaded.avatarUrl;
+      }
       await updateMyProfile({
         fullName,
         email,
         username,
-        avatarUrl,
+        avatarUrl: nextAvatarUrl,
         currentPassword: showPasswordForm ? currentPassword : undefined,
         password: showPasswordForm && newPassword.trim() ? newPassword : undefined,
       }, userId);
@@ -159,9 +124,11 @@ export default function EditProfileScreen() {
         username,
         email,
         fullName,
-        avatarUrl,
+        avatarUrl: resolveMediaUrl(nextAvatarUrl),
         role: getSessionUser()?.role,
       });
+      setAvatarUrl(nextAvatarUrl);
+      setSelectedAvatarUri('');
       Alert.alert('Thành công', 'Đã cập nhật hồ sơ');
       router.back();
     } catch (error: any) {
@@ -185,7 +152,11 @@ export default function EditProfileScreen() {
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <Card style={styles.form}>
             <View style={styles.avatarBox}>
-              <Image source={{ uri: avatarUrl || 'https://i.pravatar.cc/100?img=12' }} style={styles.avatar} contentFit="cover" />
+              <Image
+                source={{ uri: selectedAvatarUri || resolveMediaUrl(avatarUrl) || 'https://i.pravatar.cc/100?img=12' }}
+                style={styles.avatar}
+                contentFit="cover"
+              />
               <View style={styles.avatarActions}>
                 <Button title="Chọn ảnh" variant="secondary" onPress={handlePickAvatarFromLibrary} />
                 <Button title="Chụp ảnh" variant="secondary" onPress={handleTakeAvatarPhoto} />
