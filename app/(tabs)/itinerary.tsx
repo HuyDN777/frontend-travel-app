@@ -1,8 +1,9 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+    ActivityIndicator,
     Alert,
     Pressable,
     ScrollView,
@@ -15,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { createTrip } from '@/utils/api';
+import { createTrip, getTouristAttractions } from '@/utils/api';
 import { getSessionUserId } from '@/utils/session';
 import TripDetailsScreen from '../trip-details';
 
@@ -57,49 +58,6 @@ export interface Place {
     longitude?: number;
 }
 
-export const PLACE_DB: Record<string, Place[]> = {
-    'hà nội': [
-        { id: 'hn1', name: 'Hồ Hoàn Kiếm', description: 'Hồ nước đẹp trung tâm Hà Nội với đền Ngọc Sơn.', image: 'https://images.unsplash.com/photo-1555990793-da11153b2473?w=400&q=80', type: 'sight', suggestTime: '08:00', latitude: 21.0285, longitude: 105.8542 },
-        { id: 'hn2', name: 'Phố cổ Hà Nội', description: '36 phố phường với kiến trúc cổ xưa đặc sắc.', image: 'https://images.unsplash.com/photo-1528360983277-13d401cdc186?w=400&q=80', type: 'culture', suggestTime: '09:30', latitude: 21.0355, longitude: 105.8502 },
-        { id: 'hn3', name: 'Lăng Chủ tịch Hồ Chí Minh', description: 'Di tích lịch sử trọng điểm quốc gia.', image: 'https://images.unsplash.com/photo-1610641818989-c2051b5e2cfd?w=400&q=80', type: 'sight', suggestTime: '07:30', latitude: 21.0368, longitude: 105.8342 },
-        { id: 'hn4', name: 'Chợ Đồng Xuân', description: 'Khu chợ sầm uất nhất Hà Nội, mua sắm đặc sản.', image: 'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=400&q=80', type: 'shopping', suggestTime: '10:00', latitude: 21.0385, longitude: 105.8502 },
-        { id: 'hn5', name: 'Bún chả Hương Liên', description: 'Quán bún chả nổi tiếng từng đón Obama.', image: 'https://images.unsplash.com/photo-1593341646782-e0b495cff86d?w=400&q=80', type: 'food', suggestTime: '12:00', latitude: 21.0185, longitude: 105.8542 },
-        { id: 'hn6', name: 'Văn Miếu – Quốc Tử Giám', description: 'Trường đại học đầu tiên của Việt Nam.', image: 'https://images.unsplash.com/photo-1583417319070-4a69db38a482?w=400&q=80', type: 'culture', suggestTime: '14:00', latitude: 21.0280, longitude: 105.8355 },
-    ],
-    'đà nẵng': [
-        { id: 'dn1', name: 'Cầu Rồng', description: 'Biểu tượng của thành phố Đà Nẵng hiện đại.', image: 'https://images.unsplash.com/photo-1548574505-5e239809f9e0?w=400&q=80', type: 'sight', suggestTime: '18:00', latitude: 16.0610, longitude: 108.2274 },
-        { id: 'dn2', name: 'Bãi biển Mỹ Khê', description: 'Bãi biển đẹp nhất miền Trung Việt Nam.', image: 'https://images.unsplash.com/photo-1559628233-100c798642d5?w=400&q=80', type: 'nature', suggestTime: '07:00', latitude: 16.0620, longitude: 108.2450 },
-        { id: 'dn3', name: 'Bà Nà Hills', description: 'Khu du lịch trên đỉnh núi với Cầu Vàng nổi tiếng.', image: 'https://images.unsplash.com/photo-1604138601229-8c9c2e7c1ca6?w=400&q=80', type: 'sight', suggestTime: '09:00', latitude: 15.9984, longitude: 107.9880 },
-        { id: 'dn4', name: 'Chợ Hàn', description: 'Chợ truyền thống với đặc sản hải sản tươi ngon.', image: 'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=400&q=80', type: 'shopping', suggestTime: '08:00', latitude: 16.0691, longitude: 108.2235 },
-        { id: 'dn5', name: 'Mì Quảng Ếch', description: 'Thử mì Quảng đặc sản nổi tiếng nhất miền Trung.', image: 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=400&q=80', type: 'food', suggestTime: '11:30', latitude: 16.0544, longitude: 108.2022 },
-        { id: 'dn6', name: 'Ngũ Hành Sơn', description: 'Quần thể núi đá vôi huyền bí với hang động, chùa chiền.', image: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&q=80', type: 'nature', suggestTime: '14:00', latitude: 16.0028, longitude: 108.2633 },
-    ],
-    'hội an': [
-        { id: 'ha1', name: 'Phố cổ Hội An', description: 'Di sản văn hóa UNESCO với đèn lồng rực rỡ.', image: 'https://images.unsplash.com/photo-1586611292717-f828b167408c?w=400&q=80', type: 'culture', suggestTime: '08:00', latitude: 15.8801, longitude: 108.3380 },
-        { id: 'ha2', name: 'Chùa Cầu Nhật Bản', description: 'Biểu tượng lịch sử của Hội An hơn 400 năm.', image: 'https://images.unsplash.com/photo-1528360983277-13d401cdc186?w=400&q=80', type: 'sight', suggestTime: '09:00', latitude: 15.8770, longitude: 108.3275 },
-        { id: 'ha3', name: 'Cao lầu Hội An', description: 'Món đặc sản chỉ có ở Hội An.', image: 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=400&q=80', type: 'food', suggestTime: '12:00', latitude: 15.8801, longitude: 108.3380 },
-        { id: 'ha4', name: 'Làng nghề gốm Thanh Hà', description: 'Tham quan và tự tay làm gốm truyền thống.', image: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=400&q=80', type: 'culture', suggestTime: '14:00', latitude: 15.8851, longitude: 108.3340 },
-        { id: 'ha5', name: 'Bãi biển An Bàng', description: 'Bãi biển yên tĩnh, trong xanh cách phố cổ 4km.', image: 'https://images.unsplash.com/photo-1559628233-100c798642d5?w=400&q=80', type: 'nature', suggestTime: '15:30', latitude: 15.9030, longitude: 108.3429 },
-    ],
-    'hà tĩnh': [
-        { id: 'ht1', name: 'Khu di tích Ngã ba Đồng Lộc', description: 'Di tích lịch sử tưởng niệm 10 cô gái thanh niên xung phong.', image: 'https://images.unsplash.com/photo-1610641818989-c2051b5e2cfd?w=400&q=80', type: 'culture', suggestTime: '08:00', latitude: 18.3980, longitude: 105.7483 },
-        { id: 'ht2', name: 'Bãi biển Thiên Cầm', description: 'Bãi biển đẹp với bờ cát trắng và nước biển trong xanh.', image: 'https://images.unsplash.com/photo-1559628233-100c798642d5?w=400&q=80', type: 'nature', suggestTime: '09:00', latitude: 18.2394, longitude: 106.1260 },
-        { id: 'ht3', name: 'Chùa Hương Tích', description: 'Ngôi chùa cổ trên núi Hồng Lĩnh linh thiêng.', image: 'https://images.unsplash.com/photo-1583417319070-4a69db38a482?w=400&q=80', type: 'sight', suggestTime: '07:00', latitude: 18.4728, longitude: 105.7590 },
-        { id: 'ht4', name: 'Đặc sản Cu Đơ', description: 'Kẹo lạc Cu Đơ – đặc sản nổi tiếng của Hà Tĩnh.', image: 'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=400&q=80', type: 'food', suggestTime: '10:00', latitude: 18.3353, longitude: 105.8972 },
-        { id: 'ht5', name: 'Hồ Kẻ Gỗ', description: 'Hồ nước lớn với cảnh quan thiên nhiên hùng vĩ.', image: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&q=80', type: 'nature', suggestTime: '14:00', latitude: 18.1500, longitude: 105.9500 },
-        { id: 'ht6', name: 'Bún bò Hà Tĩnh', description: 'Thưởng thức bún bò đặc sắc phong cách miền Trung.', image: 'https://images.unsplash.com/photo-1593341646782-e0b495cff86d?w=400&q=80', type: 'food', suggestTime: '12:00', latitude: 18.3350, longitude: 105.9000 },
-    ],
-};
-
-export function getPlacesForDestination(dest: string): Place[] {
-    if (!dest) return DEFAULT_PLACES;
-    const key = dest.toLowerCase().trim();
-    for (const [k, places] of Object.entries(PLACE_DB)) {
-        if (key.includes(k) || k.includes(key)) return places;
-    }
-    return DEFAULT_PLACES;
-}
-
 export const DEFAULT_PLACES: Place[] = [
     { id: 'g1', name: 'Trung tâm thành phố', description: 'Khám phá khu trung tâm nhộn nhịp.', image: 'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=400&q=80', type: 'sight', suggestTime: '09:00', latitude: 21.0285, longitude: 105.8542 },
     { id: 'g2', name: 'Chợ địa phương', description: 'Thưởng thức ẩm thực đặc sản địa phương.', image: 'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=400&q=80', type: 'food', suggestTime: '10:00', latitude: 21.0280, longitude: 105.8540 },
@@ -128,13 +86,12 @@ export default function ItineraryScreen() {
     const palette = Colors[scheme];
     const router = useRouter();
 
-    const { tripId, tripName, destination, startDate, endDate, budget } = useLocalSearchParams<{
+    const { tripId, tripName, destination, startDate, endDate } = useLocalSearchParams<{
         tripId: string;
         tripName: string;
         destination: string;
         startDate: string;
         endDate: string;
-        budget: string;
     }>();
 
     // If tripId is provided, we are VIEWING an existing trip Journal
@@ -154,7 +111,52 @@ export default function ItineraryScreen() {
 
     const lastDay = dayCount - 1;
 
-    const places = useMemo(() => getPlacesForDestination(destination ?? ''), [destination]);
+    const [places, setPlaces] = useState<Place[]>([]);
+    const [loadingPlaces, setLoadingPlaces] = useState(true);
+
+    useEffect(() => {
+        if (!destination) {
+            setPlaces(DEFAULT_PLACES);
+            setLoadingPlaces(false);
+            return;
+        }
+
+        let isMounted = true;
+        async function fetchPlaces() {
+            try {
+                setLoadingPlaces(true);
+                const results = await getTouristAttractions(destination as string, 20);
+                if (!isMounted) return;
+
+                if (results && results.length > 0) {
+                    const mapped: Place[] = results.map((r, index) => {
+                        const defaultTimes = ["08:00", "09:30", "11:00", "14:00", "15:30", "18:00"];
+                        return {
+                            id: r.osmId || `p_${index}`,
+                            name: r.name || 'Unnamed Place',
+                            description: r.description || r.addressLine || 'Địa điểm tham quan nổi bật',
+                            image: r.previewImageUrl || 'https://images.unsplash.com/photo-1548574505-5e239809f9e0?w=400&q=80',
+                            type: 'sight',
+                            suggestTime: defaultTimes[index % defaultTimes.length],
+                            latitude: r.lat,
+                            longitude: r.lon
+                        };
+                    });
+                    setPlaces(mapped);
+                } else {
+                    setPlaces(DEFAULT_PLACES);
+                }
+            } catch (error) {
+                console.error("Failed to fetch attractions:", error);
+                if (isMounted) setPlaces(DEFAULT_PLACES);
+            } finally {
+                if (isMounted) setLoadingPlaces(false);
+            }
+        }
+        fetchPlaces();
+
+        return () => { isMounted = false; };
+    }, [destination]);
 
     function togglePlace(placeId: string) {
         setSelectedByDay((prev) => {
@@ -320,54 +322,62 @@ export default function ItineraryScreen() {
                 contentContainerStyle={styles.placesList}
                 showsVerticalScrollIndicator={false}
             >
-                {places.map((place) => {
-                    const selected = isSelected(place.id);
-                    return (
-                        <Pressable key={place.id} onPress={() => togglePlace(place.id)}>
-                            <Card
-                                padded={false}
-                                style={[
-                                    styles.placeCard,
-                                    selected && { borderWidth: 2, borderColor: palette.primary },
-                                ]}
-                            >
-                                <View style={styles.placeInner}>
-                                    <Image
-                                        source={{ uri: place.image }}
-                                        style={styles.placeThumb}
-                                        contentFit="cover"
-                                    />
-                                    <View style={styles.placeInfo}>
-                                        <View style={styles.placeTopRow}>
-                                            <View style={[styles.placeTypeBadge, { backgroundColor: palette.surface }]}>
-                                                <Ionicons name={placeIcon(place.type) as any} size={11} color={palette.primary} />
+                {loadingPlaces ? (
+                    <View style={{ paddingTop: Spacing.xl * 3, alignItems: 'center' }}>
+                        <ActivityIndicator size="large" color={palette.primary} />
+                    </View>
+                ) : (
+                    <>
+                        {places.map((place) => {
+                            const selected = isSelected(place.id);
+                            return (
+                                <Pressable key={place.id} onPress={() => togglePlace(place.id)}>
+                                    <Card
+                                        padded={false}
+                                        style={[
+                                            styles.placeCard,
+                                            selected ? { borderWidth: 2, borderColor: palette.primary } : { borderWidth: 0 },
+                                        ]}
+                                    >
+                                        <View style={styles.placeInner}>
+                                            <Image
+                                                source={{ uri: place.image }}
+                                                style={styles.placeThumb}
+                                                contentFit="cover"
+                                            />
+                                            <View style={styles.placeInfo}>
+                                                <View style={styles.placeTopRow}>
+                                                    <View style={[styles.placeTypeBadge, { backgroundColor: palette.surface }]}>
+                                                        <Ionicons name={placeIcon(place.type) as any} size={11} color={palette.primary} />
+                                                    </View>
+                                                    <Text style={[Typography.caption, { color: palette.textMuted }]}>
+                                                        🕐 {place.suggestTime}
+                                                    </Text>
+                                                </View>
+                                                <Text style={[Typography.bodySemi, { color: palette.text }]} numberOfLines={1}>
+                                                    {place.name}
+                                                </Text>
+                                                <Text style={[Typography.caption, { color: palette.textMuted }]} numberOfLines={2}>
+                                                    {place.description}
+                                                </Text>
                                             </View>
-                                            <Text style={[Typography.caption, { color: palette.textMuted }]}>
-                                                🕐 {place.suggestTime}
-                                            </Text>
+                                            {/* Checkbox */}
+                                            <View style={[
+                                                styles.checkbox,
+                                                { borderColor: selected ? palette.primary : palette.border },
+                                                selected ? { backgroundColor: palette.primary } : { backgroundColor: 'transparent' },
+                                            ]}>
+                                                {selected && <Ionicons name="checkmark" size={14} color="#0B1B18" />}
+                                            </View>
                                         </View>
-                                        <Text style={[Typography.bodySemi, { color: palette.text }]} numberOfLines={1}>
-                                            {place.name}
-                                        </Text>
-                                        <Text style={[Typography.caption, { color: palette.textMuted }]} numberOfLines={2}>
-                                            {place.description}
-                                        </Text>
-                                    </View>
-                                    {/* Checkbox */}
-                                    <View style={[
-                                        styles.checkbox,
-                                        { borderColor: selected ? palette.primary : palette.border },
-                                        selected && { backgroundColor: palette.primary },
-                                    ]}>
-                                        {selected && <Ionicons name="checkmark" size={14} color="#0B1B18" />}
-                                    </View>
-                                </View>
-                            </Card>
-                        </Pressable>
-                    );
-                })}
-                {/* Spacer */}
-                <View style={{ height: 100 }} />
+                                    </Card>
+                                </Pressable>
+                            );
+                        })}
+                        {/* Spacer */}
+                        <View style={{ height: 100 }} />
+                    </>
+                )}
             </ScrollView>
 
             {/* "Tạo lịch" button – chỉ hiện ở ngày cuối cùng */}

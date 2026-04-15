@@ -626,3 +626,9 @@ export async function checkInLocationApi(postItineraryDetailId: number, userId?:
     method: 'POST',
   });
 }
+
+export async function getTouristAttractions(destination: string, limit: number = 20) {
+  return request<any[]>(`/api/v1/places/attractions?destination=${encodeURIComponent(destination)}&limit=${limit}`, {
+    method: 'GET',
+  });
+}

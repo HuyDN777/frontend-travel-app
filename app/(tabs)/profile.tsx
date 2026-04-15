@@ -9,6 +9,8 @@ import {
   getMyProfile,
   getMyTrips,
   getSavedCommunityPosts,
+  getTripJournal,
+  resolveMediaUrl,
   toggleSave,
   type CommunityPost,
   type TripItem,
@@ -34,6 +36,7 @@ export default function ProfileScreen() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [trips, setTrips] = useState<TripItem[]>([]);
   const [savedPosts, setSavedPosts] = useState<CommunityPost[]>([]);
+  const [tripCoverById, setTripCoverById] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(false);
   const isAdmin = (getSessionUser()?.role ?? '').toUpperCase() === 'ADMIN';
 
@@ -52,6 +55,43 @@ export default function ProfileScreen() {
       const [me, myTrips] = await Promise.all([getMyProfile(userId), getMyTrips(userId)]);
       setProfile(me);
       setTrips(myTrips);
+
+      // Lấy ảnh bìa từ dữ liệu ảnh đã chọn khi tạo lịch trình (activeDays/stops).
+      const coversFromTripList: Record<number, string> = {};
+      const missingTripIds: number[] = [];
+
+      for (const trip of myTrips) {
+        const firstImage = getFirstSelectedTripImage(trip);
+        if (firstImage) {
+          coversFromTripList[trip.id] = firstImage;
+        } else {
+          missingTripIds.push(trip.id);
+        }
+      }
+
+      setTripCoverById(coversFromTripList);
+
+      // Nếu API getMyTrips chưa trả ảnh chi tiết, fallback đọc từ trip-journal.
+      if (missingTripIds.length > 0) {
+        const settled = await Promise.allSettled(
+          missingTripIds.map(async (tripId) => {
+            const journal = await getTripJournal(tripId);
+            const cover = getFirstSelectedTripImage(journal);
+            return { tripId, cover };
+          })
+        );
+
+        const fromJournal: Record<number, string> = {};
+        for (const item of settled) {
+          if (item.status === 'fulfilled' && item.value.cover) {
+            fromJournal[item.value.tripId] = item.value.cover;
+          }
+        }
+
+        if (Object.keys(fromJournal).length > 0) {
+          setTripCoverById((prev) => ({ ...prev, ...fromJournal }));
+        }
+      }
     } catch (error: any) {
       Alert.alert('Lỗi', error?.message ?? 'Không tải được hồ sơ');
     } finally {
@@ -92,13 +132,56 @@ export default function ProfileScreen() {
     })();
   }, [activeTab]);
 
-  const TRIP_IMAGES = [
-    'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=900&q=80',
-    'https://images.unsplash.com/photo-1493246507139-91e8fad9978e?auto=format&fit=crop&w=900&q=80',
-    'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=900&q=80',
-    'https://images.unsplash.com/photo-1504150558240-0b4fd8946624?auto=format&fit=crop&w=900&q=80',
-    'https://images.unsplash.com/photo-1510414842594-a61c69b5ae57?auto=format&fit=crop&w=900&q=80'
-  ];
+  function toValidImage(url: unknown): string {
+    if (typeof url !== 'string') return '';
+    const normalized = resolveMediaUrl(url).trim();
+    if (!normalized || normalized === 'null' || normalized === 'undefined') return '';
+    if (!/^https?:\/\//i.test(normalized) && !normalized.startsWith('data:')) return '';
+    return normalized;
+  }
+
+  function getFirstSelectedTripImage(source: any): string {
+    const daysRaw = source?.activeDays ?? source?.days ?? [];
+    const days = Array.isArray(daysRaw) ? [...daysRaw] : [];
+
+    days.sort((a: any, b: any) => {
+      const aIdx = Number(a?.dayIndex ?? a?.dayNumber ?? 0);
+      const bIdx = Number(b?.dayIndex ?? b?.dayNumber ?? 0);
+      return aIdx - bIdx;
+    });
+
+    for (const day of days) {
+      const places = day?.places ?? day?.stops ?? [];
+      if (!Array.isArray(places)) continue;
+      for (const place of places) {
+        const candidates: unknown[] = [
+          place?.imageUrl,
+          place?.post?.imageUrl,
+          place?.previewImageUrl,
+          place?.thumbnail
+        ];
+        for (const c of candidates) {
+          const valid = toValidImage(c);
+          if (valid) return valid;
+        }
+      }
+    }
+
+    // Fallback khi chuyến đi chưa có stops/places.
+    const fallbackCandidates: unknown[] = [
+      source?.imageUrl,
+      source?.coverImageUrl,
+      source?.thumbnail,
+      source?.trip?.imageUrl,
+      source?.trip?.coverImageUrl
+    ];
+    for (const c of fallbackCandidates) {
+      const valid = toValidImage(c);
+      if (valid) return valid;
+    }
+
+    return '';
+  }
 
   function handleTripOptions(trip: TripItem) {
     const isOwner = trip.userId === profile?.id;
@@ -222,11 +305,15 @@ export default function ProfileScreen() {
               const start = new Date(trip.startDate);
               const end = new Date(trip.endDate);
               const days = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
-              const imgUri = TRIP_IMAGES[(trip.id || 0) % TRIP_IMAGES.length];
+              const imgUri = tripCoverById[trip.id] ?? '';
 
               return (
                 <TouchableOpacity key={trip.id} style={[styles.tripCardCustom, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-                  <Image source={{ uri: imgUri }} style={styles.tripCardImage} contentFit="cover" />
+                  {imgUri ? (
+                    <Image source={{ uri: imgUri }} style={styles.tripCardImage} contentFit="cover" />
+                  ) : (
+                    <View style={[styles.tripCardImage, { backgroundColor: palette.border }]} />
+                  )}
                   <View style={styles.tripCardBadge}>
                     <ThemedText style={styles.tripCardBadgeText}>{days} ngày</ThemedText>
                   </View>

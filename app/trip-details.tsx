@@ -1,26 +1,19 @@
 import { Image } from 'expo-image';
 import * as Location from 'expo-location';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { Stack, useLocalSearchParams } from 'expo-router';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
     ActivityIndicator,
     FlatList,
     Pressable,
+    ScrollView,
     StyleSheet,
     Text,
     View
 } from 'react-native';
 
 import { Radius, Spacing } from '@/constants/theme';
-import { checkInLocationApi, getTripJournal } from '@/utils/api';
-
-const TRIP_IMAGES = [
-    'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=900&q=80',
-    'https://images.unsplash.com/photo-1493246507139-91e8fad9978e?auto=format&fit=crop&w=900&q=80',
-    'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=900&q=80',
-    'https://images.unsplash.com/photo-1504150558240-0b4fd8946624?auto=format&fit=crop&w=900&q=80',
-    'https://images.unsplash.com/photo-1510414842594-a61c69b5ae57?auto=format&fit=crop&w=900&q=80'
-];
+import { checkInLocationApi, getTripJournal, resolveMediaUrl } from '@/utils/api';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
@@ -47,13 +40,154 @@ function formatDateVN(s: string): string {
     return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 }
 
+function getTripDayCount(startDate?: string, endDate?: string): number {
+    if (!startDate || !endDate) return 0;
+    const start = parseDate(startDate);
+    const end = parseDate(endDate);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
+    const diff = Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
+    return diff > 0 ? diff : 0;
+}
+
+function buildDisplayDays(data: any): Array<{ itineraryId?: number; dayNumber: number; stops: any[] }> {
+    const apiDays = Array.isArray(data?.days) ? data.days : [];
+    const totalDays = getTripDayCount(data?.trip?.startDate, data?.trip?.endDate);
+
+    // Fallback: nếu thiếu khoảng ngày, vẫn hiển thị theo dữ liệu API đang có.
+    if (totalDays <= 0) {
+        return apiDays.map((d: any, idx: number) => ({
+            itineraryId: d?.itineraryId,
+            dayNumber: idx + 1,
+            stops: Array.isArray(d?.stops) ? d.stops : [],
+        }));
+    }
+
+    const arranged: Array<any | undefined> = new Array(totalDays).fill(undefined);
+    const usedIndexes = new Set<number>();
+    const mappedSourceIndexes = new Set<number>();
+    const tripStart = parseDate(data.trip.startDate);
+
+    function tryPlace(index: number, dayData: any, sourceIndex: number): boolean {
+        if (!Number.isInteger(index) || index < 0 || index >= totalDays || usedIndexes.has(index)) return false;
+        arranged[index] = dayData;
+        usedIndexes.add(index);
+        mappedSourceIndexes.add(sourceIndex);
+        return true;
+    }
+
+    for (let sourceIdx = 0; sourceIdx < apiDays.length; sourceIdx += 1) {
+        const d = apiDays[sourceIdx];
+        const dayIndexRaw = Number(d?.dayIndex);
+        if (tryPlace(dayIndexRaw, d, sourceIdx)) continue;
+
+        const dayNumberRaw = Number(d?.dayNumber);
+        if (tryPlace(dayNumberRaw - 1, d, sourceIdx)) continue;
+
+        const dayDateRaw = d?.date ?? d?.travelDate ?? d?.dayDate;
+        if (typeof dayDateRaw === 'string') {
+            const dayDate = parseDate(dayDateRaw);
+            if (!Number.isNaN(dayDate.getTime()) && !Number.isNaN(tripStart.getTime())) {
+                const offset = Math.round((dayDate.getTime() - tripStart.getTime()) / 86_400_000);
+                if (tryPlace(offset, d, sourceIdx)) continue;
+            }
+        }
+    }
+
+    let fallbackCursor = 0;
+    for (let sourceIdx = 0; sourceIdx < apiDays.length; sourceIdx += 1) {
+        if (mappedSourceIndexes.has(sourceIdx)) continue;
+        while (fallbackCursor < totalDays && usedIndexes.has(fallbackCursor)) {
+            fallbackCursor += 1;
+        }
+        if (fallbackCursor >= totalDays) break;
+        arranged[fallbackCursor] = apiDays[sourceIdx];
+        usedIndexes.add(fallbackCursor);
+        fallbackCursor += 1;
+    }
+
+    return arranged.map((d, idx) => ({
+        itineraryId: d?.itineraryId,
+        dayNumber: idx + 1,
+        stops: Array.isArray(d?.stops) ? d.stops : [],
+    }));
+}
+
+function toValidImage(url: unknown): string {
+    if (typeof url !== 'string') return '';
+    const normalized = resolveMediaUrl(url).trim();
+    if (!normalized || normalized === 'null' || normalized === 'undefined') return '';
+    if (!/^https?:\/\//i.test(normalized) && !normalized.startsWith('data:')) return '';
+    return normalized;
+}
+
+function getFirstSelectedTripImage(source: any): string {
+    const daysRaw = source?.activeDays ?? source?.days ?? [];
+    const days = Array.isArray(daysRaw) ? [...daysRaw] : [];
+
+    days.sort((a: any, b: any) => {
+        const aIdx = Number(a?.dayIndex ?? a?.dayNumber ?? 0);
+        const bIdx = Number(b?.dayIndex ?? b?.dayNumber ?? 0);
+        return aIdx - bIdx;
+    });
+
+    for (const day of days) {
+        const places = day?.places ?? day?.stops ?? [];
+        if (!Array.isArray(places)) continue;
+        for (const place of places) {
+            const candidates: unknown[] = [
+                place?.imageUrl,
+                place?.post?.imageUrl,
+                place?.previewImageUrl,
+                place?.thumbnail
+            ];
+            for (const c of candidates) {
+                const valid = toValidImage(c);
+                if (valid) return valid;
+            }
+        }
+    }
+
+    const fallbackCandidates: unknown[] = [
+        source?.imageUrl,
+        source?.coverImageUrl,
+        source?.thumbnail,
+        source?.trip?.imageUrl,
+        source?.trip?.coverImageUrl
+    ];
+    for (const c of fallbackCandidates) {
+        const valid = toValidImage(c);
+        if (valid) return valid;
+    }
+
+    return '';
+}
+
 export default function TripDetailsScreen() {
-    const router = useRouter();
     const { tripId } = useLocalSearchParams<{ tripId: string }>();
 
     const [loading, setLoading] = useState(true);
     const [data, setData] = useState<any>(null);
     const [activeDayIdx, setActiveDayIdx] = useState(0);
+    const displayDays = useMemo(() => buildDisplayDays(data), [data]);
+    const headerCoverImage = useMemo(() => getFirstSelectedTripImage(data), [data]);
+    const dayOffsets = useMemo(() => {
+        const count = displayDays.length;
+        if (count === 0) return [];
+
+        // Random ổn định theo tripId để UI không "nhảy" lại sau mỗi lần render.
+        let seed = Number(tripId || 1);
+        if (!Number.isFinite(seed) || seed <= 0) seed = 1;
+        const nextRand = () => {
+            seed = (seed * 9301 + 49297) % 233280;
+            return seed / 233280;
+        };
+
+        return Array.from({ length: count }, (_, idx) => {
+            const base = idx % 2 === 0 ? 4 : 54;
+            const jitter = Math.floor(nextRand() * 20);
+            return base + jitter;
+        });
+    }, [displayDays.length, tripId]);
 
     const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
 
@@ -91,7 +225,7 @@ export default function TripDetailsScreen() {
     // 3. Process the Checks in a stable Effect
     useEffect(() => {
         if (!data || !userLocation) return;
-        const days = data.days || [];
+        const days = displayDays;
         let hasCheckIn = false;
 
         const checkLocations = async () => {
@@ -122,7 +256,12 @@ export default function TripDetailsScreen() {
         };
 
         checkLocations();
-    }, [data, userLocation]);
+    }, [displayDays, userLocation, data]);
+
+    useEffect(() => {
+        if (displayDays.length === 0) return;
+        setActiveDayIdx((prev) => Math.min(prev, displayDays.length - 1));
+    }, [displayDays.length]);
 
     if (loading || !data) {
         return (
@@ -132,9 +271,8 @@ export default function TripDetailsScreen() {
         );
     }
 
-    const days = data.days || [];
+    const days = displayDays;
     const currentDay = days[activeDayIdx];
-    const stopsCount = currentDay?.stops?.length || 0;
     const overallStops = days.reduce((sum: number, d: any) => sum + (d.stops?.length || 0), 0);
 
     return (
@@ -143,41 +281,42 @@ export default function TripDetailsScreen() {
 
             {/* Header Half */}
             <View style={styles.headerArea}>
-                <Image
-                    source={{ uri: TRIP_IMAGES[Number(tripId || 0) % 5] }}
-                    style={StyleSheet.absoluteFillObject}
-                    contentFit="cover"
-                />
+                {headerCoverImage ? (
+                    <Image
+                        source={{ uri: headerCoverImage }}
+                        style={StyleSheet.absoluteFillObject}
+                        contentFit="cover"
+                    />
+                ) : (
+                    <View style={[StyleSheet.absoluteFillObject, styles.headerFallbackBg]} />
+                )}
                 <View style={styles.overlay} />
 
-                {/* Days Bubbles (Map placeholder equivalent) */}
+                {/* Day selector: luôn hiển thị đủ ngày, có thể cuộn ngang */}
                 <View style={styles.daysAbsoluteContainer}>
-                    {days.map((d: any, idx: number) => {
-                        const isActive = idx === activeDayIdx;
-                        // Hardcoded scattered positions roughly mapping to VN geography
-                        const mapCoordinates = [
-                            { top: '10%', left: '30%' }, // North
-                            { top: '30%', left: '45%' }, // Central North
-                            { top: '50%', left: '60%' }, // Central
-                            { top: '70%', left: '40%' }, // South
-                            { top: '85%', left: '20%' }, // Deep South
-                        ];
-                        const pos = mapCoordinates[idx % mapCoordinates.length];
-
-                        return (
-                            <Pressable
-                                key={d.itineraryId}
-                                style={[
-                                    styles.mapBubble,
-                                    { top: pos.top as any, left: pos.left as any },
-                                    isActive && styles.mapBubbleActive
-                                ]}
-                                onPress={() => setActiveDayIdx(idx)}
-                            >
-                                <Text style={[styles.mapBubbleText, isActive && styles.mapBubbleTextActive]}>{d.dayNumber}</Text>
-                            </Pressable>
-                        );
-                    })}
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.dayChipRow}
+                    >
+                        {days.map((d: any, idx: number) => {
+                            const isActive = idx === activeDayIdx;
+                            const marginTop = dayOffsets[idx] ?? 0;
+                            return (
+                                <Pressable
+                                    key={d.itineraryId ?? `day-${idx}`}
+                                    style={[
+                                        styles.mapBubble,
+                                        { marginTop },
+                                        isActive && styles.mapBubbleActive
+                                    ]}
+                                    onPress={() => setActiveDayIdx(idx)}
+                                >
+                                    <Text style={[styles.mapBubbleText, isActive && styles.mapBubbleTextActive]}>{idx + 1}</Text>
+                                </Pressable>
+                            );
+                        })}
+                    </ScrollView>
                 </View>
             </View>
 
@@ -194,8 +333,13 @@ export default function TripDetailsScreen() {
 
                 <FlatList
                     data={currentDay?.stops || []}
-                    keyExtractor={(item: any) => item.itineraryDetailId.toString()}
+                    keyExtractor={(item: any, index) => String(item.itineraryDetailId ?? `${activeDayIdx}-${index}`)}
                     contentContainerStyle={{ paddingHorizontal: Spacing.xl, paddingBottom: 100 }}
+                    ListEmptyComponent={(
+                        <View style={styles.emptyDayWrapper}>
+                            <Text style={styles.emptyDayText}>Ngày này chưa có địa điểm nào trong lịch trình.</Text>
+                        </View>
+                    )}
                     renderItem={({ item, index }) => {
                         const isArrived = item.status === '1';
 
@@ -252,16 +396,28 @@ const styles = StyleSheet.create({
         width: '100%',
         position: 'relative',
     },
+    headerFallbackBg: {
+        backgroundColor: '#3C4752',
+    },
     overlay: {
         ...StyleSheet.absoluteFillObject,
         backgroundColor: 'rgba(0,0,0,0.2)', // make map more visible
     },
     daysAbsoluteContainer: {
         position: 'absolute',
-        top: 0, left: 0, right: 0, bottom: 40,
+        left: 0,
+        right: 0,
+        bottom: 52,
+        paddingHorizontal: Spacing.lg,
+    },
+    dayChipRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: Spacing.sm,
+        minHeight: 110,
+        paddingBottom: Spacing.xs,
     },
     mapBubble: {
-        position: 'absolute',
         width: 40,
         height: 40,
         borderRadius: 20,
@@ -378,6 +534,14 @@ const styles = StyleSheet.create({
         flex: 1,
         marginRight: Spacing.md,
         lineHeight: 22,
+    },
+    emptyDayWrapper: {
+        paddingTop: Spacing.lg,
+    },
+    emptyDayText: {
+        fontSize: 14,
+        color: '#8A918C',
+        textAlign: 'center',
     },
     thumbnail: {
         width: 70,
