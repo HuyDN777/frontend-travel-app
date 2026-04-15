@@ -206,6 +206,39 @@ export type TripItem = {
   userId?: number;
 };
 
+export type ItineraryItemCreateReq = {
+  tripId: number;
+  kind?: string;
+  placeName: string;
+  address?: string;
+  lat?: number;
+  lon?: number;
+  phone?: string;
+  website?: string;
+  bookingLink?: string;
+  rating?: number;
+  openNow?: boolean;
+  amenities?: string[];
+  reviews?: string[];
+};
+
+export type ItineraryItemRes = {
+  id: number;
+  tripId: number;
+  userId: number;
+  kind?: string;
+  placeName: string;
+  address?: string;
+  lat?: number;
+  lon?: number;
+  phone?: string;
+  website?: string;
+  bookingLink?: string;
+  rating?: number;
+  openNow?: boolean;
+  createdAt?: string;
+};
+
 export type PlaceDraft = {
   name: string;
   description: string;
@@ -227,6 +260,11 @@ export type CreateTripPayload = {
   endDate: string;
   status?: string;
   activeDays?: DailyPlan[];
+};
+
+export type UpdateTripStopPayload = {
+  visitTime?: string | null;
+  note?: string | null;
 };
 
 export type CommunityPost = {
@@ -376,6 +414,29 @@ export async function getMyTrips(userId?: number) {
   }
 
   return request<TripItem[]>(`/api/v1/users/${resolvedUserId}/trips`, { userId: resolvedUserId, method: 'GET' });
+}
+
+export async function createItineraryItem(payload: ItineraryItemCreateReq, userId?: number) {
+  const resolvedUserId = resolveUserId(userId);
+  if (typeof resolvedUserId !== 'number') {
+    throw new Error('Not logged in');
+  }
+  return request<ItineraryItemRes>('/api/v1/itinerary-items', {
+    userId: resolvedUserId,
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getTripItineraryItems(tripId: number, userId?: number) {
+  const resolvedUserId = resolveUserId(userId);
+  if (typeof resolvedUserId !== 'number') {
+    throw new Error('Not logged in');
+  }
+  return request<ItineraryItemRes[]>(`/api/v1/itinerary-items/trips/${tripId}`, {
+    userId: resolvedUserId,
+    method: 'GET',
+  });
 }
 
 export async function createTrip(payload: CreateTripPayload, userId?: number) {
@@ -624,6 +685,21 @@ export async function checkInLocationApi(postItineraryDetailId: number, userId?:
   return request<void>(`/api/v1/itinerary-details/${postItineraryDetailId}/check-in`, {
     userId,
     method: 'POST',
+  });
+}
+
+export async function updateTripStopApi(itineraryDetailId: number, payload: UpdateTripStopPayload, userId?: number): Promise<void> {
+  return request<void>(`/api/v1/trips/journal/stops/${itineraryDetailId}`, {
+    userId,
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteTripStopApi(itineraryDetailId: number, userId?: number): Promise<void> {
+  return request<void>(`/api/v1/trips/journal/stops/${itineraryDetailId}`, {
+    userId,
+    method: 'DELETE',
   });
 }
 

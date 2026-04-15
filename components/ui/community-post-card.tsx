@@ -38,6 +38,7 @@ export function CommunityPostCard({ post, canEdit, onLike, onSave, onShare, onEd
   }, [post.imageUrl, post.imageUrls]);
 
   const authorName = post.authorFullName || post.authorUsername || `Người dùng ${post.userId}`;
+  const normalizedTitle = (post.title ?? '').trim();
 
   const postedTime = useMemo(() => {
     const date = new Date(post.createdAt);
@@ -141,6 +142,12 @@ export function CommunityPostCard({ post, canEdit, onLike, onSave, onShare, onEd
       ) : null}
 
       <View style={styles.content}>
+        {normalizedTitle ? (
+          <View style={styles.metaIconRow}>
+            <Ionicons name="newspaper-outline" size={moderateScale(14)} color={palette.textMuted} />
+            <ThemedText type="defaultSemiBold" numberOfLines={2} style={styles.metaText}>{normalizedTitle}</ThemedText>
+          </View>
+        ) : null}
         {post.location ? (
           <View style={styles.metaIconRow}>
             <Ionicons name="location-outline" size={moderateScale(14)} color={palette.textMuted} />

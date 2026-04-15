@@ -183,21 +183,6 @@ export default function ProfileScreen() {
     return '';
   }
 
-  function handleTripOptions(trip: TripItem) {
-    const isOwner = trip.userId === profile?.id;
-
-    const options: any[] = [
-      { text: 'Hủy', style: 'cancel' },
-      { text: 'Xem chi tiết', onPress: () => router.push({ pathname: '/trip-details', params: { tripId: trip.id } }) },
-    ];
-
-    if (isOwner) {
-      options.push({ text: 'Xóa chuyến đi', style: 'destructive', onPress: () => confirmDeleteTrip(trip) });
-    }
-
-    Alert.alert('Tùy chọn', `Chuyến đi: ${trip.tripName}`, options);
-  }
-
   function confirmDeleteTrip(trip: TripItem) {
     Alert.alert('Xác nhận xóa', `Bạn có chắc muốn xóa chuyến đi "${trip.tripName}"? Lịch trình và thành viên sẽ bị xóa vĩnh viễn.`, [
       { text: 'Hủy', style: 'cancel' },
@@ -306,6 +291,7 @@ export default function ProfileScreen() {
               const end = new Date(trip.endDate);
               const days = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
               const imgUri = tripCoverById[trip.id] ?? '';
+              const canDelete = trip.userId === profile?.id;
 
               return (
                 <TouchableOpacity key={trip.id} style={[styles.tripCardCustom, { backgroundColor: palette.surface, borderColor: palette.border }]}>
@@ -318,17 +304,32 @@ export default function ProfileScreen() {
                     <ThemedText style={styles.tripCardBadgeText}>{days} ngày</ThemedText>
                   </View>
                   <View style={styles.tripCardContent}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                       <ThemedText type="defaultSemiBold" style={{ fontSize: 18, flex: 1 }} numberOfLines={1}>{trip.tripName}</ThemedText>
-                      <TouchableOpacity onPress={() => handleTripOptions(trip)} style={{ paddingLeft: Spacing.sm, paddingVertical: 4 }}>
-                        <Ionicons name="ellipsis-horizontal" size={20} color={palette.textMuted} />
-                      </TouchableOpacity>
                     </View>
                     <View style={[styles.tripMetaRow, { marginTop: Spacing.sm }]}>
                       <Ionicons name="calendar-outline" size={14} color={palette.textMuted} />
                       <ThemedText style={{ color: palette.textMuted, fontSize: 13 }}>
                         {trip.startDate} - {trip.endDate}
                       </ThemedText>
+                    </View>
+                    <View style={styles.tripActionsRow}>
+                      <TouchableOpacity
+                        onPress={() => router.push({ pathname: '/trip-details', params: { tripId: trip.id, fromProfile: '1' } })}
+                        style={[styles.tripActionBtn, styles.tripActionPrimary]}
+                      >
+                        <Ionicons name="eye-outline" size={15} color="#FFFFFF" />
+                        <ThemedText style={styles.tripActionPrimaryText}>Xem chi tiết</ThemedText>
+                      </TouchableOpacity>
+                      {canDelete ? (
+                        <TouchableOpacity
+                          onPress={() => confirmDeleteTrip(trip)}
+                          style={[styles.tripActionBtn, styles.tripActionDanger]}
+                        >
+                          <Ionicons name="trash-outline" size={15} color="#FFFFFF" />
+                          <ThemedText style={styles.tripActionDangerText}>Xóa</ThemedText>
+                        </TouchableOpacity>
+                      ) : null}
                     </View>
                   </View>
                 </TouchableOpacity>
@@ -470,5 +471,34 @@ const styles = StyleSheet.create({
   },
   tripCardContent: {
     padding: Spacing.lg,
+  },
+  tripActionsRow: {
+    marginTop: Spacing.md,
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  tripActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: Radius.pill,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 8,
+  },
+  tripActionPrimary: {
+    backgroundColor: '#1F78FF',
+  },
+  tripActionDanger: {
+    backgroundColor: '#D64545',
+  },
+  tripActionPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  tripActionDangerText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

@@ -46,7 +46,7 @@ export type BookingMasterRes = {
   id: number;
   totalAmount: number;
   paymentStatus: string;
-  tripId: number;
+  tripId?: number | null;
   userId: number;
   /** FLIGHT | HOTEL | RESTAURANT | COACH | OTHER */
   category?: string;

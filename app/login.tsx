@@ -1,3 +1,4 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
@@ -10,7 +11,6 @@ import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { SocialOAuthButton } from '@/components/ui/social-oauth-button';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { login, resolveMediaUrl, resetForgotPassword, sendForgotPasswordOTP, verifyForgotPasswordOTP } from '@/utils/api';
@@ -29,6 +29,7 @@ export default function LoginScreen() {
 
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const [showForgotModal, setShowForgotModal] = useState(false);
@@ -37,6 +38,8 @@ export default function LoginScreen() {
   const [forgotOtp, setForgotOtp] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
   const [sendingForgotOtp, setSendingForgotOtp] = useState(false);
   const [verifyingForgotOtp, setVerifyingForgotOtp] = useState(false);
   const [resettingPassword, setResettingPassword] = useState(false);
@@ -219,26 +222,23 @@ export default function LoginScreen() {
               onChangeText={setIdentifier}
               autoCapitalize="none"
             />
-            <Input placeholder="Mật khẩu" value={password} onChangeText={setPassword} secureTextEntry />
+            <Input
+              placeholder="Mật khẩu"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPassword}
+              trailing={
+                <Pressable onPress={() => setShowPassword((prev) => !prev)} hitSlop={8}>
+                  <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={palette.textMuted} />
+                </Pressable>
+              }
+            />
 
             <Pressable onPress={openForgotModal}>
               <ThemedText style={[styles.forgotText, { color: palette.primary }]}>Quên mật khẩu?</ThemedText>
             </Pressable>
 
             <Button title="Đăng nhập" size="lg" onPress={handleLogin} loading={loading} />
-
-            <View style={styles.socialRow}>
-              <SocialOAuthButton
-                provider="google"
-                label="Google"
-                onPress={() => Alert.alert('Thông báo', 'Đăng nhập Google sẽ được bổ sung sau.')}
-              />
-              <SocialOAuthButton
-                provider="apple"
-                label="Apple"
-                onPress={() => Alert.alert('Thông báo', 'Đăng nhập Apple sẽ được bổ sung sau.')}
-              />
-            </View>
 
             <Pressable onPress={() => router.push('/sign-up')}>
               <ThemedText style={[styles.switchText, { color: palette.primary }]}>Chưa có tài khoản? Đăng ký</ThemedText>
@@ -308,15 +308,33 @@ export default function LoginScreen() {
                     placeholder="Mật khẩu mới"
                     value={newPassword}
                     onChangeText={setNewPassword}
-                    secureTextEntry
+                    secureTextEntry={!showNewPassword}
                     editable={!resettingPassword}
+                    trailing={
+                      <Pressable onPress={() => setShowNewPassword((prev) => !prev)} hitSlop={8}>
+                        <Ionicons
+                          name={showNewPassword ? 'eye-off-outline' : 'eye-outline'}
+                          size={20}
+                          color={palette.textMuted}
+                        />
+                      </Pressable>
+                    }
                   />
                   <Input
                     placeholder="Xác nhận mật khẩu mới"
                     value={confirmNewPassword}
                     onChangeText={setConfirmNewPassword}
-                    secureTextEntry
+                    secureTextEntry={!showConfirmNewPassword}
                     editable={!resettingPassword}
+                    trailing={
+                      <Pressable onPress={() => setShowConfirmNewPassword((prev) => !prev)} hitSlop={8}>
+                        <Ionicons
+                          name={showConfirmNewPassword ? 'eye-off-outline' : 'eye-outline'}
+                          size={20}
+                          color={palette.textMuted}
+                        />
+                      </Pressable>
+                    }
                   />
                   <Button
                     title="Đổi mật khẩu"
@@ -377,10 +395,6 @@ const styles = StyleSheet.create({
   forgotText: {
     textAlign: 'right',
     marginTop: -4,
-  },
-  socialRow: {
-    flexDirection: 'row',
-    gap: Spacing.md,
   },
   switchText: {
     textAlign: 'center',

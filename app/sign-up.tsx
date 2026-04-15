@@ -1,3 +1,4 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
@@ -10,7 +11,6 @@ import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { SocialOAuthButton } from '@/components/ui/social-oauth-button';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { completeRegistration, sendOTP, verifyOTP } from '@/utils/api';
@@ -30,6 +30,8 @@ export default function SignUpScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [otpCode, setOtpCode] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [otpVerified, setOtpVerified] = useState(false);
@@ -278,15 +280,29 @@ export default function SignUpScreen() {
                 placeholder="Nhập mật khẩu (tối thiểu 6 ký tự)"
                 value={password}
                 onChangeText={setPassword}
-                secureTextEntry
+                secureTextEntry={!showPassword}
                 editable={!loading && !sendingOtp && !verifyingOtp}
+                trailing={
+                  <Pressable onPress={() => setShowPassword((prev) => !prev)} hitSlop={8}>
+                    <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={palette.textMuted} />
+                  </Pressable>
+                }
               />
               <Input
                 placeholder="Nhập lại mật khẩu"
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
-                secureTextEntry
+                secureTextEntry={!showConfirmPassword}
                 editable={!loading && !sendingOtp && !verifyingOtp}
+                trailing={
+                  <Pressable onPress={() => setShowConfirmPassword((prev) => !prev)} hitSlop={8}>
+                    <Ionicons
+                      name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'}
+                      size={20}
+                      color={palette.textMuted}
+                    />
+                  </Pressable>
+                }
               />
 
               <Button
@@ -297,19 +313,6 @@ export default function SignUpScreen() {
                 style={styles.button}
                 size="lg"
               />
-
-              <View style={styles.socialRow}>
-                <SocialOAuthButton
-                  provider="google"
-                  label="Google"
-                  onPress={() => Alert.alert('Thông báo', 'Đăng ký bằng Google sẽ được bổ sung sau.')}
-                />
-                <SocialOAuthButton
-                  provider="apple"
-                  label="Apple"
-                  onPress={() => Alert.alert('Thông báo', 'Đăng ký bằng Apple sẽ được bổ sung sau.')}
-                />
-              </View>
 
               <Pressable onPress={() => router.replace('/login')} disabled={loading}>
                 <ThemedText style={[styles.switchText, { color: palette.primary }]}>
@@ -366,10 +369,6 @@ const styles = StyleSheet.create({
   },
   button: {
     marginTop: Spacing.md,
-  },
-  socialRow: {
-    flexDirection: 'row',
-    gap: Spacing.md,
   },
   switchText: {
     textAlign: 'center',

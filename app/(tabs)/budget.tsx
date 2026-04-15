@@ -1,8 +1,9 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/ui/button';
@@ -20,8 +21,8 @@ import {
   upsertTripBudget,
 } from '@/services/api/finance';
 import type { BudgetRow, CategoryAnalyticsRes, ExpenseRow, TripBalanceRes } from '@/types/api';
-import { getMyTrips, type TripItem } from '@/utils/api';
-import { getSessionUserId } from '@/utils/session';
+import { getMyTrips, getTripMembers, type InviteCompanionRes, type TripItem } from '@/utils/api';
+import { getSessionUser, getSessionUserId } from '@/utils/session';
 
 function formatVND(raw: string): string {
     const num = parseInt(raw.replace(/\D/g, ''), 10);
@@ -77,6 +78,9 @@ export default function BudgetScreen() {
   const [editingDescription, setEditingDescription] = useState('');
   const [tripPickerVisible, setTripPickerVisible] = useState(false);
   const [tripSearchQuery, setTripSearchQuery] = useState('');
+  const [datePickerTarget, setDatePickerTarget] = useState<'from' | 'to' | null>(null);
+  const [tempDate, setTempDate] = useState<Date>(new Date());
+  const [memberNameById, setMemberNameById] = useState<Record<number, string>>({});
 
   const selectedTrip = useMemo(
     () => trips.find((trip) => trip.id === selectedTripId) ?? null,
@@ -95,7 +99,6 @@ export default function BudgetScreen() {
     () => expenses.reduce((sum, row) => sum + (row.amount || 0), 0),
     [expenses]
   );
-
   useEffect(() => {
     if (setupMode) return;
     const userId = getSessionUserId();
@@ -128,6 +131,7 @@ export default function BudgetScreen() {
   useEffect(() => {
     if (setupMode || !selectedTripId) return;
     void loadFinance(selectedTripId);
+    void loadMemberNames(selectedTripId);
   }, [setupMode, selectedTripId]);
 
   async function loadFinance(tripId: number) {
@@ -149,6 +153,28 @@ export default function BudgetScreen() {
     } finally {
       setLoadingFinance(false);
     }
+  }
+
+  async function loadMemberNames(tripId: number) {
+    const currentUserId = getSessionUserId();
+    if (!currentUserId) return;
+
+    const me = getSessionUser();
+    const nextMap: Record<number, string> = {
+      [currentUserId]: me?.fullName || me?.username || 'Bạn',
+    };
+
+    try {
+      const members = await getTripMembers(tripId, currentUserId);
+      (members || []).forEach((member: InviteCompanionRes) => {
+        if (typeof member?.userId !== 'number') return;
+        nextMap[member.userId] = member.inviteeName || `User #${member.userId}`;
+      });
+    } catch {
+      // Keep self-only mapping as fallback.
+    }
+
+    setMemberNameById(nextMap);
   }
 
   function handleChangeText(text: string) {
@@ -223,10 +249,6 @@ export default function BudgetScreen() {
 
   async function handleApplyDateFilter() {
     if (!selectedTripId) return;
-    if ((fromDate && !/^\d{4}-\d{2}-\d{2}$/.test(fromDate)) || (toDate && !/^\d{4}-\d{2}-\d{2}$/.test(toDate))) {
-      Alert.alert('Ngày không hợp lệ', 'Vui lòng dùng định dạng YYYY-MM-DD.');
-      return;
-    }
     await loadFinance(selectedTripId);
   }
 
@@ -235,6 +257,43 @@ export default function BudgetScreen() {
     setFromDate('');
     setToDate('');
     await loadFinance(selectedTripId);
+  }
+
+  function openDatePicker(target: 'from' | 'to') {
+    const initial =
+      target === 'from'
+        ? (fromDate ? new Date(`${fromDate}T00:00:00`) : new Date())
+        : (toDate ? new Date(`${toDate}T00:00:00`) : new Date());
+    setTempDate(initial);
+    setDatePickerTarget(target);
+  }
+
+  function applyPickedDate(date: Date) {
+    const value = formatDateYmd(date.toISOString());
+    if (datePickerTarget === 'from') {
+      setFromDate(value);
+      if (toDate && toDate < value) {
+        setToDate('');
+      }
+    } else if (datePickerTarget === 'to') {
+      setToDate(value);
+    }
+  }
+
+  function onDatePickerChange(event: DateTimePickerEvent, selected?: Date) {
+    if (Platform.OS === 'android') {
+      setDatePickerTarget(null);
+      if (event.type === 'set' && selected) {
+        applyPickedDate(selected);
+      }
+      return;
+    }
+    if (selected) setTempDate(selected);
+  }
+
+  function confirmIosDate() {
+    applyPickedDate(tempDate);
+    setDatePickerTarget(null);
   }
 
   function beginEditExpense(row: ExpenseRow) {
@@ -516,22 +575,24 @@ export default function BudgetScreen() {
             </Card>
 
             <Card style={styles.financeCard}>
-              <Text style={[Typography.bodySemi, { color: palette.text }]}>Lọc theo ngày (YYYY-MM-DD)</Text>
+              <Text style={[Typography.bodySemi, { color: palette.text }]}>Lọc theo ngày</Text>
               <View style={styles.filterRow}>
-                <TextInput
-                  value={fromDate}
-                  onChangeText={setFromDate}
-                  placeholder="Từ ngày"
-                  placeholderTextColor={palette.textMuted}
-                  style={[styles.textInput, styles.filterInput, { color: palette.text, borderColor: palette.border }]}
-                />
-                <TextInput
-                  value={toDate}
-                  onChangeText={setToDate}
-                  placeholder="Đến ngày"
-                  placeholderTextColor={palette.textMuted}
-                  style={[styles.textInput, styles.filterInput, { color: palette.text, borderColor: palette.border }]}
-                />
+                <Pressable
+                  onPress={() => openDatePicker('from')}
+                  style={[styles.dateField, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+                  <Ionicons name="calendar-outline" size={16} color={palette.primary} />
+                  <Text style={[Typography.caption, { color: fromDate ? palette.text : palette.textMuted, flex: 1 }]}>
+                    {fromDate || 'Từ ngày'}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => openDatePicker('to')}
+                  style={[styles.dateField, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+                  <Ionicons name="calendar-outline" size={16} color={palette.primary} />
+                  <Text style={[Typography.caption, { color: toDate ? palette.text : palette.textMuted, flex: 1 }]}>
+                    {toDate || 'Đến ngày'}
+                  </Text>
+                </Pressable>
               </View>
               <View style={styles.filterActions}>
                 <Button title="Áp dụng" variant="secondary" onPress={() => void handleApplyDateFilter()} />
@@ -557,6 +618,9 @@ export default function BudgetScreen() {
                         </Text>
                         <Text style={[Typography.caption, { color: palette.textMuted }]}>
                           {formatDateYmd(row.createdAt) || 'Không rõ ngày'}
+                        </Text>
+                        <Text style={[Typography.caption, { color: palette.textMuted }]}>
+                          Người chi: {memberNameById[row.userId] || `User #${row.userId}`}
                         </Text>
                       </View>
                       <Pressable onPress={() => beginEditExpense(row)} style={styles.rowIconBtn}>
@@ -661,6 +725,56 @@ export default function BudgetScreen() {
           </View>
         </View>
       </Modal>
+
+      {Platform.OS === 'android' && datePickerTarget !== null ? (
+        <DateTimePicker
+          value={tempDate}
+          mode="date"
+          display="default"
+          minimumDate={
+            datePickerTarget === 'to' && fromDate
+              ? new Date(`${fromDate}T00:00:00`)
+              : undefined
+          }
+          onChange={onDatePickerChange}
+        />
+      ) : null}
+
+      {Platform.OS === 'ios' ? (
+        <Modal
+          visible={datePickerTarget !== null}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setDatePickerTarget(null)}>
+          <Pressable style={styles.modalOverlay} onPress={() => setDatePickerTarget(null)} />
+          <View style={[styles.dateModalSheet, { backgroundColor: palette.surface }]}>
+            <View style={[styles.modalHandle, { backgroundColor: palette.border }]} />
+            <View style={styles.modalHeader}>
+              <Pressable onPress={() => setDatePickerTarget(null)}>
+                <Text style={[Typography.bodySemi, { color: palette.textMuted }]}>Hủy</Text>
+              </Pressable>
+              <Text style={[Typography.bodySemi, { color: palette.text }]}>
+                {datePickerTarget === 'from' ? 'Chọn ngày bắt đầu' : 'Chọn ngày kết thúc'}
+              </Text>
+              <Pressable onPress={confirmIosDate}>
+                <Text style={[Typography.bodySemi, { color: palette.primary }]}>Xong</Text>
+              </Pressable>
+            </View>
+            <DateTimePicker
+              value={tempDate}
+              mode="date"
+              display="spinner"
+              minimumDate={
+                datePickerTarget === 'to' && fromDate
+                  ? new Date(`${fromDate}T00:00:00`)
+                  : undefined
+              }
+              onChange={onDatePickerChange}
+              style={styles.iosPicker}
+            />
+          </View>
+        </Modal>
+      ) : null}
     </View>
   );
 }
@@ -776,8 +890,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: Spacing.sm,
   },
-  filterInput: {
+  dateField: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    gap: Spacing.xs,
   },
   filterActions: {
     marginTop: Spacing.sm,
@@ -857,5 +978,32 @@ const styles = StyleSheet.create({
     padding: Spacing.sm,
     marginBottom: Spacing.sm,
     gap: Spacing.xs,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  dateModalSheet: {
+    borderTopLeftRadius: Radius.xl,
+    borderTopRightRadius: Radius.xl,
+    paddingBottom: Spacing.xl,
+  },
+  modalHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: Radius.pill,
+    alignSelf: 'center',
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.xs,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+  },
+  iosPicker: {
+    width: '100%',
   },
 });

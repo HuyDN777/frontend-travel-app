@@ -1,19 +1,32 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import * as Location from 'expo-location';
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
     ActivityIndicator,
+    Alert,
     FlatList,
+    Modal,
     Pressable,
     ScrollView,
     StyleSheet,
     Text,
+    TextInput,
     View
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Radius, Spacing } from '@/constants/theme';
-import { checkInLocationApi, getTripJournal, resolveMediaUrl } from '@/utils/api';
+import {
+    checkInLocationApi,
+    deleteTripStopApi,
+    getTripItineraryItems,
+    getTripJournal,
+    type ItineraryItemRes,
+    resolveMediaUrl,
+    updateTripStopApi
+} from '@/utils/api';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
@@ -163,13 +176,22 @@ function getFirstSelectedTripImage(source: any): string {
 }
 
 export default function TripDetailsScreen() {
-    const { tripId } = useLocalSearchParams<{ tripId: string }>();
+    const { tripId, fromProfile } = useLocalSearchParams<{ tripId: string; fromProfile?: string }>();
+    const router = useRouter();
+    const insets = useSafeAreaInsets();
+    const shouldHideBackButton = fromProfile === '1';
 
     const [loading, setLoading] = useState(true);
     const [data, setData] = useState<any>(null);
+    const [savedItems, setSavedItems] = useState<ItineraryItemRes[]>([]);
     const [activeDayIdx, setActiveDayIdx] = useState(0);
     const displayDays = useMemo(() => buildDisplayDays(data), [data]);
     const headerCoverImage = useMemo(() => getFirstSelectedTripImage(data), [data]);
+    const [editVisible, setEditVisible] = useState(false);
+    const [editingStopId, setEditingStopId] = useState<number | null>(null);
+    const [editVisitTime, setEditVisitTime] = useState('');
+    const [editNote, setEditNote] = useState('');
+    const [savingEdit, setSavingEdit] = useState(false);
     const dayOffsets = useMemo(() => {
         const count = displayDays.length;
         if (count === 0) return [];
@@ -209,8 +231,12 @@ export default function TripDetailsScreen() {
     async function fetchJournal() {
         try {
             if (!tripId) return;
-            const res = await getTripJournal(Number(tripId));
+            const [res, items] = await Promise.all([
+                getTripJournal(Number(tripId)),
+                getTripItineraryItems(Number(tripId)).catch(() => []),
+            ]);
             setData(res);
+            setSavedItems(Array.isArray(items) ? items : []);
         } catch (e) {
             console.log('Error fetching journal', e);
         } finally {
@@ -221,6 +247,55 @@ export default function TripDetailsScreen() {
     useEffect(() => {
         fetchJournal();
     }, [tripId]);
+
+    function openEditStop(item: any) {
+        setEditingStopId(item?.itineraryDetailId ?? null);
+        setEditVisitTime(item?.visitTime ? String(item.visitTime).substring(0, 5) : '');
+        setEditNote(item?.note ?? '');
+        setEditVisible(true);
+    }
+
+    async function handleSaveEditStop() {
+        if (!editingStopId) return;
+        const normalizedTime = editVisitTime.trim();
+        if (normalizedTime && !/^\d{2}:\d{2}$/.test(normalizedTime)) {
+            Alert.alert('Giờ chưa đúng', 'Vui lòng nhập giờ theo định dạng HH:mm (ví dụ 08:30).');
+            return;
+        }
+        try {
+            setSavingEdit(true);
+            await updateTripStopApi(editingStopId, {
+                visitTime: normalizedTime || null,
+                note: editNote,
+            });
+            setEditVisible(false);
+            await fetchJournal();
+        } catch (error) {
+            Alert.alert('Không thể lưu', error instanceof Error ? error.message : 'Đã có lỗi xảy ra.');
+        } finally {
+            setSavingEdit(false);
+        }
+    }
+
+    function handleDeleteStop(item: any) {
+        const detailId = item?.itineraryDetailId;
+        if (!detailId) return;
+        Alert.alert('Xóa địa điểm', 'Bạn có chắc muốn xóa địa điểm này khỏi nhật ký?', [
+            { text: 'Hủy', style: 'cancel' },
+            {
+                text: 'Xóa',
+                style: 'destructive',
+                onPress: async () => {
+                    try {
+                        await deleteTripStopApi(detailId);
+                        await fetchJournal();
+                    } catch (error) {
+                        Alert.alert('Không thể xóa', error instanceof Error ? error.message : 'Đã có lỗi xảy ra.');
+                    }
+                },
+            },
+        ]);
+    }
 
     // 3. Process the Checks in a stable Effect
     useEffect(() => {
@@ -281,6 +356,15 @@ export default function TripDetailsScreen() {
 
             {/* Header Half */}
             <View style={styles.headerArea}>
+                {!shouldHideBackButton ? (
+                    <Pressable
+                        onPress={() => router.replace('/(tabs)/itinerary')}
+                        style={[styles.backBtn, { top: insets.top + 8 }]}
+                        accessibilityLabel="Quay lại"
+                    >
+                        <Ionicons name="chevron-back" size={20} color="#1E2A24" />
+                    </Pressable>
+                ) : null}
                 {headerCoverImage ? (
                     <Image
                         source={{ uri: headerCoverImage }}
@@ -331,6 +415,23 @@ export default function TripDetailsScreen() {
                     </Text>
                 </View>
 
+                {savedItems.length > 0 ? (
+                    <View style={styles.savedWrap}>
+                        <Text style={styles.savedTitle}>Địa điểm đã thêm từ Nhà hàng/Khách sạn</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.savedRow}>
+                            {savedItems.map((item) => (
+                                <View key={item.id} style={styles.savedCard}>
+                                    <Text style={styles.savedName} numberOfLines={1}>{item.placeName}</Text>
+                                    <Text style={styles.savedMeta}>{item.kind === 'hotel' ? 'Khách sạn' : 'Nhà hàng'}</Text>
+                                    {item.address ? (
+                                        <Text style={styles.savedAddress} numberOfLines={2}>{item.address}</Text>
+                                    ) : null}
+                                </View>
+                            ))}
+                        </ScrollView>
+                    </View>
+                ) : null}
+
                 <FlatList
                     data={currentDay?.stops || []}
                     keyExtractor={(item: any, index) => String(item.itineraryDetailId ?? `${activeDayIdx}-${index}`)}
@@ -359,6 +460,14 @@ export default function TripDetailsScreen() {
                                             {item.visitTime ? item.visitTime.substring(0, 5) : 'Tuỳ chọn'}
                                         </Text>
                                     </View>
+                                    <View style={styles.actionRow}>
+                                        <Pressable onPress={() => openEditStop(item)}>
+                                            <Text style={styles.actionLink}>Sửa</Text>
+                                        </Pressable>
+                                        <Pressable onPress={() => handleDeleteStop(item)}>
+                                            <Text style={[styles.actionLink, styles.actionDelete]}>Xóa</Text>
+                                        </Pressable>
+                                    </View>
 
                                     {isArrived && (
                                         <Text style={styles.statusText}>✓ Đã đến ({item.post.latitude}, {item.post.longitude})</Text>
@@ -378,6 +487,43 @@ export default function TripDetailsScreen() {
                     }}
                 />
             </View>
+
+            <Modal
+                visible={editVisible}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setEditVisible(false)}
+            >
+                <View style={styles.modalBackdrop}>
+                    <View style={styles.modalCard}>
+                        <Text style={styles.modalTitle}>Sửa điểm trong nhật ký</Text>
+                        <Text style={styles.modalLabel}>Giờ thăm (HH:mm)</Text>
+                        <TextInput
+                            value={editVisitTime}
+                            onChangeText={setEditVisitTime}
+                            placeholder="Ví dụ: 09:30"
+                            style={styles.modalInput}
+                            keyboardType="numbers-and-punctuation"
+                        />
+                        <Text style={styles.modalLabel}>Ghi chú</Text>
+                        <TextInput
+                            value={editNote}
+                            onChangeText={setEditNote}
+                            placeholder="Ghi chú cá nhân..."
+                            style={[styles.modalInput, styles.modalInputMultiline]}
+                            multiline
+                        />
+                        <View style={styles.modalActions}>
+                            <Pressable onPress={() => setEditVisible(false)} style={styles.modalBtnSecondary}>
+                                <Text style={styles.modalBtnSecondaryText}>Hủy</Text>
+                            </Pressable>
+                            <Pressable onPress={handleSaveEditStop} style={styles.modalBtnPrimary} disabled={savingEdit}>
+                                <Text style={styles.modalBtnPrimaryText}>{savingEdit ? 'Đang lưu...' : 'Lưu'}</Text>
+                            </Pressable>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -395,6 +541,17 @@ const styles = StyleSheet.create({
         height: '40%',
         width: '100%',
         position: 'relative',
+    },
+    backBtn: {
+        position: 'absolute',
+        left: Spacing.lg,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255,255,255,0.95)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 20,
     },
     headerFallbackBg: {
         backgroundColor: '#3C4752',
@@ -470,6 +627,45 @@ const styles = StyleSheet.create({
         color: '#8A918C',
         marginTop: 4,
     },
+    savedWrap: {
+        paddingHorizontal: Spacing.xl,
+        paddingBottom: Spacing.md,
+        gap: Spacing.sm,
+    },
+    savedTitle: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#2D312E',
+    },
+    savedRow: {
+        flexDirection: 'row',
+        gap: Spacing.sm,
+        paddingRight: Spacing.lg,
+    },
+    savedCard: {
+        width: 210,
+        borderRadius: Radius.md,
+        backgroundColor: '#FFFFFF',
+        borderWidth: 1,
+        borderColor: '#ECE7D8',
+        padding: Spacing.md,
+        gap: 4,
+    },
+    savedName: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#2D312E',
+    },
+    savedMeta: {
+        fontSize: 12,
+        color: '#FF5722',
+        fontWeight: '600',
+    },
+    savedAddress: {
+        fontSize: 12,
+        color: '#5C635E',
+        lineHeight: 18,
+    },
     timelineRow: {
         flexDirection: 'row',
         marginBottom: Spacing.xl,
@@ -515,6 +711,19 @@ const styles = StyleSheet.create({
         color: '#8A918C',
         fontWeight: '600',
     },
+    actionRow: {
+        flexDirection: 'row',
+        gap: Spacing.md,
+        marginTop: 6,
+    },
+    actionLink: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: '#1F78FF',
+    },
+    actionDelete: {
+        color: '#D64545',
+    },
     statusText: {
         fontSize: 12,
         fontWeight: '700',
@@ -547,5 +756,70 @@ const styles = StyleSheet.create({
         width: 70,
         height: 70,
         borderRadius: Radius.sm,
+    },
+    modalBackdrop: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.35)',
+        justifyContent: 'flex-end',
+    },
+    modalCard: {
+        backgroundColor: '#FFFFFF',
+        borderTopLeftRadius: 18,
+        borderTopRightRadius: 18,
+        padding: Spacing.lg,
+        gap: Spacing.sm,
+    },
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: '800',
+        color: '#2D312E',
+        marginBottom: 2,
+    },
+    modalLabel: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#5C635E',
+        marginTop: 6,
+    },
+    modalInput: {
+        borderWidth: 1,
+        borderColor: '#E6E0D0',
+        borderRadius: Radius.md,
+        paddingHorizontal: Spacing.md,
+        paddingVertical: 10,
+        fontSize: 14,
+        color: '#2D312E',
+        backgroundColor: '#FFFCF2',
+    },
+    modalInputMultiline: {
+        minHeight: 88,
+        textAlignVertical: 'top',
+    },
+    modalActions: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        gap: Spacing.sm,
+        marginTop: Spacing.sm,
+    },
+    modalBtnSecondary: {
+        paddingHorizontal: Spacing.md,
+        paddingVertical: 10,
+        borderRadius: Radius.md,
+        borderWidth: 1,
+        borderColor: '#DAD4C3',
+    },
+    modalBtnSecondaryText: {
+        fontWeight: '700',
+        color: '#5C635E',
+    },
+    modalBtnPrimary: {
+        paddingHorizontal: Spacing.lg,
+        paddingVertical: 10,
+        borderRadius: Radius.md,
+        backgroundColor: '#FF5722',
+    },
+    modalBtnPrimaryText: {
+        fontWeight: '800',
+        color: '#FFFFFF',
     },
 });

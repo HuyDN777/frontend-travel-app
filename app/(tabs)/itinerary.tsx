@@ -1,6 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
     ActivityIndicator,
@@ -11,12 +12,14 @@ import {
     Text,
     View
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { createTrip, getTouristAttractions } from '@/utils/api';
+import { upsertTripBudget } from '@/services/api/finance';
+import { createTrip, deleteTrip, getMyTrips, getTouristAttractions, type TripItem } from '@/utils/api';
 import { getSessionUserId } from '@/utils/session';
 import TripDetailsScreen from '../trip-details';
 
@@ -85,24 +88,29 @@ export default function ItineraryScreen() {
     const scheme = useColorScheme() ?? 'light';
     const palette = Colors[scheme];
     const router = useRouter();
+    const insets = useSafeAreaInsets();
+    const currentUserId = getSessionUserId();
 
-    const { tripId, tripName, destination, startDate, endDate } = useLocalSearchParams<{
+    const { tripId, tripName, destination, startDate, endDate, budget } = useLocalSearchParams<{
         tripId: string;
         tripName: string;
         destination: string;
         startDate: string;
         endDate: string;
+        budget?: string;
     }>();
 
     // If tripId is provided, we are VIEWING an existing trip Journal
     if (tripId) {
         return <TripDetailsScreen />;
     }
+    const hasCreateParams = !!(destination && startDate && endDate);
 
     const [activeDay, setActiveDay] = useState(0);
     const [saving, setSaving] = useState(false);
     // selectedByDay: Record<dayIndex, Set<placeId>>
     const [selectedByDay, setSelectedByDay] = useState<Record<number, Set<string>>>({});
+    const [hiddenPlaceIds, setHiddenPlaceIds] = useState<Set<string>>(new Set());
 
     const dayCount = useMemo(() => {
         if (!startDate || !endDate) return 3;
@@ -113,6 +121,30 @@ export default function ItineraryScreen() {
 
     const [places, setPlaces] = useState<Place[]>([]);
     const [loadingPlaces, setLoadingPlaces] = useState(true);
+    const [existingTrips, setExistingTrips] = useState<TripItem[]>([]);
+    const [loadingTrips, setLoadingTrips] = useState(false);
+    
+    async function loadExistingTrips() {
+        const userId = getSessionUserId();
+        if (!userId) {
+            setExistingTrips([]);
+            return;
+        }
+        setLoadingTrips(true);
+        try {
+            const trips = await getMyTrips(userId);
+            const sorted = [...trips].sort((a, b) => {
+                const ad = a.startDate ? parseDate(a.startDate).getTime() : 0;
+                const bd = b.startDate ? parseDate(b.startDate).getTime() : 0;
+                return bd - ad;
+            });
+            setExistingTrips(sorted);
+        } catch {
+            setExistingTrips([]);
+        } finally {
+            setLoadingTrips(false);
+        }
+    }
 
     useEffect(() => {
         if (!destination) {
@@ -158,6 +190,49 @@ export default function ItineraryScreen() {
         return () => { isMounted = false; };
     }, [destination]);
 
+    useEffect(() => {
+        if (hasCreateParams) return;
+        let mounted = true;
+        void (async () => {
+            await loadExistingTrips();
+            if (!mounted) return;
+        })();
+        return () => {
+            mounted = false;
+        };
+    }, [hasCreateParams]);
+
+    useFocusEffect(
+        React.useCallback(() => {
+            if (!hasCreateParams) {
+                void loadExistingTrips();
+            }
+            return undefined;
+        }, [hasCreateParams])
+    );
+
+    function confirmDeleteTrip(trip: TripItem) {
+        if (trip.userId != null && currentUserId != null && trip.userId !== currentUserId) {
+            Alert.alert('Không thể xóa', 'Bạn không phải chủ chuyến đi này.');
+            return;
+        }
+        Alert.alert('Xác nhận xóa', `Bạn có chắc muốn xóa chuyến đi "${trip.tripName}"?`, [
+            { text: 'Hủy', style: 'cancel' },
+            {
+                text: 'Xóa',
+                style: 'destructive',
+                onPress: async () => {
+                    try {
+                        await deleteTrip(trip.id);
+                        await loadExistingTrips();
+                    } catch (error) {
+                        Alert.alert('Không thể xóa', error instanceof Error ? error.message : 'Đã có lỗi xảy ra.');
+                    }
+                },
+            },
+        ]);
+    }
+
     function togglePlace(placeId: string) {
         setSelectedByDay((prev) => {
             const current = new Set(prev[activeDay] ?? []);
@@ -169,6 +244,38 @@ export default function ItineraryScreen() {
 
     function isSelected(placeId: string): boolean {
         return (selectedByDay[activeDay] ?? new Set()).has(placeId);
+    }
+
+    function hideRecommendation(placeId: string) {
+        setHiddenPlaceIds((prev) => {
+            const next = new Set(prev);
+            next.add(placeId);
+            return next;
+        });
+        setSelectedByDay((prev) => {
+            const copy: Record<number, Set<string>> = {};
+            Object.entries(prev).forEach(([k, set]) => {
+                const nextSet = new Set(set);
+                nextSet.delete(placeId);
+                copy[Number(k)] = nextSet;
+            });
+            return copy;
+        });
+    }
+
+    function restoreAllRecommendations() {
+        setHiddenPlaceIds(new Set());
+    }
+
+    function shuffleRecommendations() {
+        setPlaces((prev) => {
+            const next = [...prev];
+            for (let i = next.length - 1; i > 0; i -= 1) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [next[i], next[j]] = [next[j], next[i]];
+            }
+            return next;
+        });
     }
 
     async function handleCreateItinerary() {
@@ -212,6 +319,14 @@ export default function ItineraryScreen() {
                 activeDays,
             }, userId);
 
+            const initialBudget = Number(String(budget ?? '').replace(/\D/g, ''));
+            if (!Number.isNaN(initialBudget) && initialBudget > 0) {
+                await upsertTripBudget(tripId, {
+                    category: 'Tổng',
+                    limitAmount: initialBudget,
+                });
+            }
+
             // Chuyển đến màn mời bạn bè
             router.replace({
                 pathname: '/trip-members',
@@ -224,33 +339,85 @@ export default function ItineraryScreen() {
         }
     }
 
-    // Show empty state if missing params (accessed directly from tab bar)
-    if (!destination || !startDate || !endDate) {
+    // Accessed directly from tab bar: show existing trips instead of always empty
+    if (!hasCreateParams) {
         return (
-            <View style={[styles.root, styles.centered, { backgroundColor: palette.background }]}>
-                <Ionicons name="map-outline" size={52} color={palette.textMuted} />
-                <Text style={[Typography.titleLG, { color: palette.text, marginTop: Spacing.md }]}>
-                    Chưa có chuyến đi
-                </Text>
-                <Text style={[Typography.body, { color: palette.textMuted, textAlign: 'center', marginTop: Spacing.sm }]}>
-                    Hãy tạo chuyến đi mới để bắt đầu lên lịch trình nhé!
-                </Text>
-                <Button
-                    title="Tạo chuyến đi →"
-                    size="lg"
-                    style={{ marginTop: Spacing.xl, borderRadius: Radius.pill }}
-                    onPress={() => router.push('/name-trip')}
-                />
+            <View style={[styles.root, styles.centered, { backgroundColor: palette.background, paddingTop: insets.top + Spacing.sm }]}>
+                {loadingTrips ? (
+                    <ActivityIndicator size="large" color={palette.primary} />
+                ) : existingTrips.length > 0 ? (
+                    <View style={styles.existingWrap}>
+                        <Text style={[Typography.titleLG, { color: palette.text }]}>Lịch trình của bạn</Text>
+                        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.existingList}>
+                            {existingTrips.map((trip) => (
+                                <Card key={trip.id} style={[styles.existingCard, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+                                    <View style={styles.existingHeader}>
+                                        <Text style={[Typography.bodySemi, { color: palette.text, flex: 1 }]} numberOfLines={1}>
+                                            {trip.tripName || 'Chuyến đi của tôi'}
+                                        </Text>
+                                        {(trip.userId == null || currentUserId == null || trip.userId === currentUserId) ? (
+                                            <Pressable onPress={() => confirmDeleteTrip(trip)} hitSlop={8}>
+                                                <Ionicons name="trash-outline" size={18} color="#D64545" />
+                                            </Pressable>
+                                        ) : null}
+                                    </View>
+                                    <Text style={[Typography.caption, { color: palette.textMuted }]} numberOfLines={1}>
+                                        {trip.destination || 'Chưa có điểm đến'}
+                                    </Text>
+                                    <Text style={[Typography.caption, { color: palette.textMuted, marginTop: 4 }]}>
+                                        {trip.startDate && trip.endDate
+                                            ? `${formatDateVN(trip.startDate)} - ${formatDateVN(trip.endDate)}`
+                                            : 'Chưa có ngày'}
+                                    </Text>
+                                    <Pressable
+                                        onPress={() =>
+                                            router.push({
+                                                pathname: '/(tabs)/itinerary',
+                                                params: { tripId: String(trip.id) },
+                                            })
+                                        }
+                                        style={styles.detailBtn}>
+                                        <Text style={styles.detailBtnText}>Chi tiết hành trình</Text>
+                                        <Ionicons name="chevron-forward" size={14} color="#1F78FF" />
+                                    </Pressable>
+                                </Card>
+                            ))}
+                        </ScrollView>
+                        <Button
+                            title="Tạo chuyến đi mới"
+                            size="lg"
+                            style={{ borderRadius: Radius.pill }}
+                            onPress={() => router.push('/name-trip')}
+                        />
+                    </View>
+                ) : (
+                    <>
+                        <Ionicons name="map-outline" size={52} color={palette.textMuted} />
+                        <Text style={[Typography.titleLG, { color: palette.text, marginTop: Spacing.md }]}>
+                            Chưa có chuyến đi
+                        </Text>
+                        <Text style={[Typography.body, { color: palette.textMuted, textAlign: 'center', marginTop: Spacing.sm }]}>
+                            Hãy tạo chuyến đi mới để bắt đầu lên lịch trình nhé!
+                        </Text>
+                        <Button
+                            title="Tạo chuyến đi →"
+                            size="lg"
+                            style={{ marginTop: Spacing.xl, borderRadius: Radius.pill }}
+                            onPress={() => router.push('/name-trip')}
+                        />
+                    </>
+                )}
             </View>
         );
     }
 
     const selectedCount = Object.values(selectedByDay).reduce((sum, s) => sum + s.size, 0);
+    const visiblePlaces = places.filter((p) => !hiddenPlaceIds.has(p.id));
 
     return (
         <View style={[styles.root, { backgroundColor: palette.background }]}>
             {/* Header */}
-            <View style={[styles.header, { borderBottomColor: palette.border }]}>
+            <View style={[styles.header, { borderBottomColor: palette.border, paddingTop: insets.top + Spacing.md }]}>
                 <View style={{ flex: 1 }}>
                     <Text style={[Typography.titleLG, { color: palette.text, fontSize: 22 }]} numberOfLines={1}>
                         Khám phá {destination}
@@ -316,6 +483,18 @@ export default function ItineraryScreen() {
                     {selectedByDay[activeDay]?.size ?? 0} đã chọn
                 </Text>
             </View>
+            <View style={styles.recommendActions}>
+                <Pressable onPress={shuffleRecommendations} style={[styles.recommendBtn, { borderColor: palette.border }]}>
+                    <Text style={[Typography.caption, { color: palette.text }]}>Đổi gợi ý</Text>
+                </Pressable>
+                <Pressable
+                    onPress={restoreAllRecommendations}
+                    style={[styles.recommendBtn, { borderColor: palette.border, opacity: hiddenPlaceIds.size > 0 ? 1 : 0.5 }]}
+                    disabled={hiddenPlaceIds.size === 0}
+                >
+                    <Text style={[Typography.caption, { color: palette.text }]}>Khôi phục gợi ý</Text>
+                </Pressable>
+            </View>
 
             {/* Places list */}
             <ScrollView
@@ -328,7 +507,7 @@ export default function ItineraryScreen() {
                     </View>
                 ) : (
                     <>
-                        {places.map((place) => {
+                        {visiblePlaces.map((place) => {
                             const selected = isSelected(place.id);
                             return (
                                 <Pressable key={place.id} onPress={() => togglePlace(place.id)}>
@@ -360,6 +539,13 @@ export default function ItineraryScreen() {
                                                 <Text style={[Typography.caption, { color: palette.textMuted }]} numberOfLines={2}>
                                                     {place.description}
                                                 </Text>
+                                                <Pressable
+                                                    onPress={() => hideRecommendation(place.id)}
+                                                    hitSlop={8}
+                                                    style={styles.hideBtn}
+                                                >
+                                                    <Text style={styles.hideBtnText}>Không phù hợp</Text>
+                                                </Pressable>
                                             </View>
                                             {/* Checkbox */}
                                             <View style={[
@@ -412,6 +598,37 @@ export default function ItineraryScreen() {
 const styles = StyleSheet.create({
     root: { flex: 1 },
     centered: { justifyContent: 'center', alignItems: 'center', flex: 1, padding: Spacing.xl },
+    existingWrap: {
+        width: '100%',
+        flex: 1,
+        gap: Spacing.md,
+    },
+    existingList: {
+        gap: Spacing.sm,
+        paddingVertical: Spacing.xs,
+    },
+    existingCard: {
+        borderWidth: 1,
+        borderRadius: Radius.lg,
+        padding: Spacing.md,
+    },
+    existingHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: Spacing.sm,
+    },
+    detailBtn: {
+        marginTop: Spacing.sm,
+        alignSelf: 'flex-start',
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    detailBtnText: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#1F78FF',
+    },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -459,6 +676,18 @@ const styles = StyleSheet.create({
         paddingHorizontal: Spacing.lg,
         paddingBottom: Spacing.sm,
     },
+    recommendActions: {
+        flexDirection: 'row',
+        gap: Spacing.sm,
+        paddingHorizontal: Spacing.lg,
+        paddingBottom: Spacing.sm,
+    },
+    recommendBtn: {
+        borderWidth: 1,
+        borderRadius: Radius.pill,
+        paddingHorizontal: Spacing.md,
+        paddingVertical: 6,
+    },
     placesList: {
         paddingHorizontal: Spacing.lg,
         gap: Spacing.sm,
@@ -480,6 +709,15 @@ const styles = StyleSheet.create({
     placeInfo: {
         flex: 1,
         gap: 4,
+    },
+    hideBtn: {
+        alignSelf: 'flex-start',
+        marginTop: 2,
+    },
+    hideBtnText: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: '#D64545',
     },
     placeTopRow: {
         flexDirection: 'row',

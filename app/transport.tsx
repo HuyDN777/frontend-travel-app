@@ -88,7 +88,7 @@ export default function TransportScreen() {
     <View style={[styles.root, { backgroundColor: palette.background }]}>
       <ScrollView contentContainerStyle={styles.content}>
         <Card style={styles.card}>
-          <Text style={[Typography.bodySemi, { color: palette.text }]}>Tìm kiếm vé xe khách</Text>
+          <Text style={[Typography.bodySemi, { color: palette.text }]}>Tra cứu tuyến xe khách</Text>
           <Input label="Điểm đi" value={from} onChangeText={setFrom} placeholder="VD: TP.HCM" />
           <Input label="Điểm đến" value={to} onChangeText={setTo} placeholder="VD: Đà Nẵng" />
           <Input label="Ngày đi" value={dateYmd} onChangeText={setDateYmd} placeholder="YYYY-MM-DD" />
@@ -109,7 +109,7 @@ export default function TransportScreen() {
                     {item.snippet || 'Không có mô tả.'}
                   </Text>
                   <Button
-                    title={openingLink === item.link ? 'Đang mở...' : 'Xem chi tiết & Đặt vé'}
+                    title={openingLink === item.link ? 'Đang mở...' : 'Xem thông tin đối tác'}
                     variant="secondary"
                     onPress={() => void handleOpenPartner(item)}
                     disabled={openingLink === item.link}

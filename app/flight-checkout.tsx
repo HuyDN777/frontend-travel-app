@@ -9,9 +9,10 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { createFlightBooking } from '@/services/api/bookings';
+import { createFlightBookingWithoutTrip } from '@/services/api/bookings';
 import { API_BASE_URL } from '@/services/api/http';
-import { initiatePayment } from '@/services/api/payments';
+import { initiatePaymentWithoutTrip } from '@/services/api/payments';
+import { getSessionUserId } from '@/utils/session';
 
 type BookingExtras = {
   baggageKg: 0 | 15 | 20;
@@ -28,8 +29,6 @@ type PassengerInfo = {
 };
 
 const USD_TO_VND_RATE = 26000;
-const DEFAULT_TRIP_ID = Number(process.env.EXPO_PUBLIC_DEFAULT_TRIP_ID ?? '1');
-const DEFAULT_USER_ID = Number(process.env.EXPO_PUBLIC_DEFAULT_USER_ID ?? '1');
 const BAGGAGE_PRICE_VND: Record<BookingExtras['baggageKg'], number> = { 0: 0, 15: 250000, 20: 350000 };
 const INSURANCE_PRICE_VND = 49000;
 
@@ -195,8 +194,14 @@ export default function FlightCheckoutScreen() {
       setOfferExpired(false);
       setCheckoutLoading(true);
       setError('');
-      const booking = await createFlightBooking(DEFAULT_TRIP_ID, {
-        userId: DEFAULT_USER_ID,
+      const sessionUserId = getSessionUserId();
+      if (!sessionUserId) {
+        setError('Bạn cần đăng nhập lại để thanh toán.');
+        return;
+      }
+
+      const booking = await createFlightBookingWithoutTrip({
+        userId: sessionUserId,
         totalAmount: finalAmount,
         paymentStatus: 'PENDING',
         pnrCode: params.pnrCode || undefined,
@@ -207,13 +212,13 @@ export default function FlightCheckoutScreen() {
         arrivalTime: toTimeOnly(params.arriveIso),
       });
 
-      const payment = await initiatePayment(DEFAULT_TRIP_ID, booking.id, {
+      const payment = await initiatePaymentWithoutTrip(sessionUserId, booking.id, {
         provider: paymentProvider,
         amount: finalAmount,
         orderInfo: `Thanh toán vé ${params.fromCode}-${params.toCode}`,
         returnUrl: `${getBackendOrigin()}/api/v1/payments/vnpay/callback?appReturnUrl=${encodeURIComponent(
           Linking.createURL('/payment-status')
-        )}&tripId=${DEFAULT_TRIP_ID}&bookingId=${booking.id}`,
+        )}&bookingId=${booking.id}`,
         ipnUrl: `${getBackendOrigin()}/api/v1/payments/vnpay/ipn`,
       });
 
@@ -226,7 +231,6 @@ export default function FlightCheckoutScreen() {
           router.replace({
             pathname: '/payment-status',
             params: {
-              tripId: String(queryParams.tripId ?? DEFAULT_TRIP_ID),
               bookingId: String(queryParams.bookingId ?? booking.id),
               status: String(queryParams.status ?? ''),
             },
@@ -236,7 +240,7 @@ export default function FlightCheckoutScreen() {
       }
       router.push({
         pathname: '/payment-status',
-        params: { tripId: String(DEFAULT_TRIP_ID), bookingId: String(booking.id) },
+        params: { bookingId: String(booking.id) },
       });
     } catch (e) {
       const message = e instanceof Error ? mapApiErrorMessage(e.message) : 'Không thể thanh toán.';
