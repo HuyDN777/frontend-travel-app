@@ -141,10 +141,6 @@ export function CommunityPostCard({ post, canEdit, onLike, onSave, onShare, onEd
       ) : null}
 
       <View style={styles.content}>
-        <View style={styles.metaIconRow}>
-          <Ionicons name="newspaper-outline" size={moderateScale(14)} color={palette.textMuted} />
-          <ThemedText type="defaultSemiBold" numberOfLines={2} style={styles.metaText}>{post.title}</ThemedText>
-        </View>
         {post.location ? (
           <View style={styles.metaIconRow}>
             <Ionicons name="location-outline" size={moderateScale(14)} color={palette.textMuted} />
