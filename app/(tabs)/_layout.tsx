@@ -13,7 +13,7 @@ export default function TabLayout() {
   const role = (getSessionUser()?.role ?? '').toUpperCase();
 
   if (role === 'ADMIN') {
-    return <Redirect href="/admin-panel" />;
+    return <Redirect href="/admin" />;
   }
 
   return (

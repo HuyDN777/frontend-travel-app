@@ -7,3 +7,10 @@ export function initiatePayment(tripId: number, bookingId: number, payload: Paym
     body: JSON.stringify(payload),
   });
 }
+
+export function initiatePaymentWithoutTrip(userId: number, bookingId: number, payload: PaymentInitiateReq) {
+  return apiRequest<PaymentInitiateRes>(`/users/${userId}/bookings/${bookingId}/payments/initiate`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}

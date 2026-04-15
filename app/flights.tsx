@@ -406,7 +406,10 @@ export default function FlightsScreen() {
   return (
     <View style={[styles.root, { backgroundColor: palette.background }]}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Text style={[Typography.titleLG, { color: palette.text }]}>Đặt chuyến bay</Text>
+        <View style={styles.headerRow}>
+          <Text style={[Typography.titleLG, { color: palette.text }]}>Đặt chuyến bay</Text>
+          <Button title="Vé của tôi" variant="secondary" onPress={() => router.push('/my-tickets')} />
+        </View>
 
         <Card style={styles.formCard}>
           <Text style={[Typography.bodySemi, { color: palette.text }]}>Điểm đi ({originLabel})</Text>
@@ -607,6 +610,12 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
   },
   formCard: { gap: Spacing.sm },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+  },
   suggestionRow: {
     flexDirection: 'row',
     gap: Spacing.sm,

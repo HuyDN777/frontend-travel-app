@@ -191,6 +191,28 @@ export default function ExploreScreen() {
           ))}
         </View>
 
+        <Pressable
+          onPress={() => router.push('/my-tickets')}
+          style={({ pressed }) => [
+            styles.ticketBanner,
+            {
+              backgroundColor: palette.surface,
+              borderColor: palette.border,
+              opacity: pressed ? 0.9 : 1,
+            },
+          ]}>
+          <View style={[styles.ticketIconWrap, { backgroundColor: `${palette.primary}22` }]}>
+            <Ionicons name="ticket-outline" size={20} color={palette.primary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[Typography.bodySemi, { color: palette.text }]}>Vé của tôi</Text>
+            <Text style={[Typography.caption, { color: palette.textMuted }]}>
+              Quản lý vé máy bay đã đặt trong ứng dụng
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={palette.textMuted} />
+        </Pressable>
+
         <View style={styles.sectionHead}>
           <Text style={[Typography.titleLG, styles.sectionTitle, { color: palette.text }]}>
             Điểm đến nổi bật
@@ -377,6 +399,22 @@ const styles = StyleSheet.create({
   destinationSubtitle: {
     color: 'rgba(255,255,255,0.9)',
     marginTop: Spacing.xs,
+  },
+  ticketBanner: {
+    borderWidth: 1,
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    ...Elevation.card,
+  },
+  ticketIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   aiBanner: {
     flexDirection: 'row',

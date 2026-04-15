@@ -4,7 +4,7 @@ import * as Linking from 'expo-linking';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/ui/button';
@@ -239,9 +239,11 @@ export default function PlaceDetailScreen() {
         amenities: mergedAmenities,
         reviews: highlightedReviews.map((r) => (r.summary || '').trim()).filter(Boolean),
       });
+      Alert.alert('Đã thêm', 'Địa điểm đã được thêm vào hành trình.');
       setTripModalVisible(false);
-    } catch {
-      // keep modal open so user can retry
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Không thể thêm vào hành trình.';
+      Alert.alert('Thêm thất bại', message);
     } finally {
       setAddingTripId(null);
     }

@@ -26,13 +26,15 @@ export default function RootLayout() {
         <Stack.Screen name="community-my-posts" options={{ headerShown: false }} />
         <Stack.Screen name="edit-profile" options={{ headerShown: false }} />
         <Stack.Screen name="admin-panel" options={{ headerShown: false }} />
+        <Stack.Screen name="admin" options={{ headerShown: false, gestureEnabled: false }} />
         <Stack.Screen name="flights" options={{ title: 'Chuyến bay', presentation: 'card' }} />
         <Stack.Screen name="hotels" options={{ title: 'Khách sạn', presentation: 'card' }} />
         <Stack.Screen name="restaurants" options={{ title: 'Nhà hàng', presentation: 'card' }} />
-        <Stack.Screen name="transport" options={{ title: 'Xe / tàu / bus', presentation: 'card' }} />
+        <Stack.Screen name="transport" options={{ title: 'Xe', presentation: 'card' }} />
         <Stack.Screen name="transport-web" options={{ presentation: 'card' }} />
         <Stack.Screen name="destination-detail" options={{ headerShown: false, presentation: 'card' }} />
         <Stack.Screen name="place-detail" options={{ headerShown: false, presentation: 'card' }} />
+        <Stack.Screen name="trip-details" options={{ title: 'Chi tiết hành trình', presentation: 'card' }} />
         <Stack.Screen name="flight-checkout" options={{ title: 'Xác nhận & thanh toán', presentation: 'card' }} />
         <Stack.Screen name="my-tickets" options={{ title: 'Vé của tôi', presentation: 'card' }} />
         <Stack.Screen name="payment-status" options={{ title: 'Trạng thái thanh toán', presentation: 'card' }} />

@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { getTripBookings } from '@/services/api/bookings';
+import { getTripBookings, getUserBookings } from '@/services/api/bookings';
+import { getSessionUserId } from '@/utils/session';
 
 type PaymentState = 'PENDING' | 'PAID' | 'FAILED' | 'UNKNOWN' | 'NOT_APP';
 
@@ -31,27 +32,26 @@ export default function PaymentStatusScreen() {
   }, [params.status]);
 
   const refreshStatus = useCallback(async () => {
-    if (!tripId || !bookingId) {
+    const userId = getSessionUserId();
+    if (!bookingId || !userId) {
       setStatus('UNKNOWN');
-      setMessage('Thiếu thông tin đơn đặt chỗ.');
+      setMessage('Thiếu thông tin booking hoặc phiên đăng nhập.');
       return;
     }
     try {
       setLoading(true);
-      const bookings = await getTripBookings(tripId);
+      const bookings = tripId ? await getTripBookings(tripId) : await getUserBookings(userId);
       const booking = bookings.find((item) => item.id === bookingId);
       if (!booking) {
         setStatus('UNKNOWN');
-        setMessage('Không tìm thấy booking trong chuyến đi.');
+        setMessage('Không tìm thấy booking.');
         return;
       }
 
       const paymentStatus = (booking.paymentStatus || '').toUpperCase();
       if (paymentStatus === 'PAID') {
         setStatus('PAID');
-        setMessage(
-          'Thanh toán thành công. Vào "Vé của tôi" để lấy mã (ETKT/HTL/RST/BUS) và QR đưa cho nhà hàng hoặc khách sạn đối soát.'
-        );
+        setMessage('Thanh toán thành công. Vào "Vé của tôi" để xem vé.');
       } else if (paymentStatus === 'FAILED') {
         setStatus('FAILED');
         setMessage('Thanh toán thất bại. Bạn có thể thử lại với phương thức khác.');
