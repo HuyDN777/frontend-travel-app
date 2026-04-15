@@ -1,5 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { AdminShell } from '@/components/admin/admin-shell';
 import { Button } from '@/components/ui/button';
@@ -7,13 +8,14 @@ import { Card } from '@/components/ui/card';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { useAdminDashboard } from '@/hooks/use-admin-dashboard';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { deleteCommunityPost } from '@/utils/api';
+import { deleteCommunityPost, type CommunityPost } from '@/utils/api';
 import { getSessionUserId } from '@/utils/session';
 
 export default function AdminModerationScreen() {
   const scheme = useColorScheme() ?? 'light';
   const palette = Colors[scheme];
   const { moderationQueue, loading, reload } = useAdminDashboard();
+  const [selectedPost, setSelectedPost] = useState<CommunityPost | null>(null);
 
   async function handleDelete(postId: number) {
     const userId = getSessionUserId();
@@ -27,8 +29,23 @@ export default function AdminModerationScreen() {
     }
   }
 
+  function confirmDelete(postId: number) {
+    Alert.alert(
+      'Xóa bài viết',
+      'Bạn có chắc chắn muốn xóa bài viết này không?',
+      [
+        { text: 'Hủy', style: 'cancel' },
+        { text: 'Đồng ý', style: 'destructive', onPress: () => void handleDelete(postId) },
+      ]
+    );
+  }
+
+  function handleReview(post: CommunityPost) {
+    setSelectedPost(post);
+  }
+
   return (
-    <AdminShell title="Moderate Community Posts" subtitle="Review feed, xử lý nội dung và làm sạch bảng tin cộng đồng.">
+    <AdminShell title="Quản lý Bài viết Cộng đồng" subtitle="Kiểm duyệt bảng tin, xử lý nội dung báo cáo và bảo vệ cộng đồng.">
       {moderationQueue.map((post) => (
         <Card key={post.id} style={styles.postCard}>
           <View style={styles.postHead}>
@@ -43,9 +60,11 @@ export default function AdminModerationScreen() {
                 {post.authorFullName || post.authorUsername || `User ${post.userId}`} · {post.location || 'Không có vị trí'}
               </Text>
             </View>
-            <View style={[styles.queuePill, { backgroundColor: '#FCE1E5' }]}>
-              <Text style={[Typography.caption, { color: '#D95168', fontWeight: '700' }]}>Review</Text>
-            </View>
+            <Pressable onPress={() => handleReview(post)}>
+              <View style={[styles.queuePill, { backgroundColor: '#FCE1E5' }]}>
+                <Text style={[Typography.caption, { color: '#D95168', fontWeight: '700' }]}>Review</Text>
+              </View>
+            </Pressable>
           </View>
 
           <Text style={[Typography.body, { color: palette.textMuted }]} numberOfLines={3}>
@@ -53,17 +72,55 @@ export default function AdminModerationScreen() {
           </Text>
 
           <View style={styles.actions}>
-            <Button title="Giữ lại" variant="secondary" onPress={() => {}} />
-            <Button title="Xóa bài viết" onPress={() => void handleDelete(post.id)} />
+            <Button title="Xóa bài viết" onPress={() => confirmDelete(post.id)} />
           </View>
         </Card>
       ))}
 
       {!loading && moderationQueue.length === 0 ? (
         <Card>
-          <Text style={[Typography.body, { color: palette.textMuted }]}>Không có bài viết nào trong queue moderation.</Text>
+          <Text style={[Typography.body, { color: palette.textMuted }]}>Không có bài viết nào trong hàng đợi cần xem xét.</Text>
         </Card>
       ) : null}
+
+      <Modal visible={!!selectedPost} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: palette.background }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[Typography.title, { color: palette.text }]}>Chi tiết bài viết</Text>
+              <Pressable onPress={() => setSelectedPost(null)} style={styles.closeBtn}>
+                <Ionicons name="close" size={24} color={palette.text} />
+              </Pressable>
+            </View>
+            <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
+              {selectedPost && (
+                <>
+                  <Text style={[Typography.titleLG, { color: palette.text }]}>{selectedPost.title}</Text>
+                  <Text style={[Typography.caption, { color: palette.textMuted, marginBottom: Spacing.md }]}>
+                    Bởi {selectedPost.authorFullName || selectedPost.authorUsername} · {selectedPost.location || 'Không có vị trí'}
+                  </Text>
+                  
+                  {(selectedPost.imageUrls && selectedPost.imageUrls.length > 0) ? (
+                    selectedPost.imageUrls.map((url, i) => (
+                      <Image key={i} source={{ uri: url }} style={styles.modalImage} resizeMode="cover" />
+                    ))
+                  ) : selectedPost.imageUrl ? (
+                    <Image source={{ uri: selectedPost.imageUrl }} style={styles.modalImage} resizeMode="cover" />
+                  ) : null}
+
+                  <Text style={[Typography.body, { color: palette.text, marginVertical: Spacing.md }]}>
+                    {selectedPost.content || 'Không có nội dung mô tả.'}
+                  </Text>
+
+                  {selectedPost.budget ? (
+                    <Text style={[Typography.bodySemi, { color: palette.text }]}>Ngân sách: {selectedPost.budget.toLocaleString('vi-VN')} VND</Text>
+                  ) : null}
+                </>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </AdminShell>
   );
 }
@@ -93,5 +150,34 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.sm,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    height: '80%',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: Spacing.lg,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+  },
+  closeBtn: {
+    padding: Spacing.xs,
+  },
+  modalScroll: {
+    flex: 1,
+  },
+  modalImage: {
+    width: '100%',
+    height: 250,
+    borderRadius: Radius.md,
+    marginBottom: Spacing.sm,
   },
 });

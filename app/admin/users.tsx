@@ -15,22 +15,22 @@ export default function AdminUsersScreen() {
   const palette = Colors[scheme];
   const { users, loading, reload } = useAdminDashboard();
 
-
   async function handleDeleteUser(user: UserProfile) {
     Alert.alert(
-      'Xoá người dùng',
-      `Bạn có chắc muốn xoá tài khoản ${user.fullName || user.username}?`,
+      'Xác nhận xóa',
+      `Bạn có muốn xóa người dùng "${user.fullName || user.username}" không? Hành động này không thể hoàn tác!`,
       [
-        { text: 'Huỷ', style: 'cancel' },
+        { text: 'Không', style: 'cancel' },
         {
-          text: 'Xoá',
+          text: 'Xóa người dùng',
           style: 'destructive',
           onPress: async () => {
             try {
               await deleteUser(user.id);
               await reload();
+              Alert.alert('Thành công', 'Đã xóa người dùng thành công.');
             } catch (error) {
-              Alert.alert('Không xoá được', error instanceof Error ? error.message : 'Lỗi không xác định.');
+              Alert.alert('Không xóa được', error instanceof Error ? error.message : 'Lỗi không xác định.');
             }
           },
         },
@@ -38,9 +38,12 @@ export default function AdminUsersScreen() {
     );
   }
 
-  return (
-    <AdminShell title="Manage Users" subtitle="Quản trị tài khoản, role và trạng thái truy cập của hệ thống.">
+  function handleAddUser() {
+    Alert.alert('Chức năng thêm người dùng sẽ được cập nhật sau!');
+  }
 
+  return (
+    <AdminShell title="Quản lý người dùng" subtitle="Quản lý tài khoản, vai trò và trạng thái truy cập.">
       {users.map((user) => {
         const isAdmin = (user.role ?? '').toUpperCase() === 'ADMIN';
         const daysRegistered = Math.floor((Date.now() - new Date(user.createdAt).getTime()) / (1000 * 60 * 60 * 24));
@@ -55,7 +58,6 @@ export default function AdminUsersScreen() {
                   {user.fullName || user.username}
                 </Text>
                 <Text style={[Typography.caption, { color: palette.textMuted }]}>{user.email}</Text>
-                <Text style={[Typography.caption, { color: palette.textMuted }]}>Đăng ký {daysRegistered} ngày</Text>
               </View>
               <View style={[styles.rolePill, { backgroundColor: isAdmin ? '#D8F2EC' : palette.surfaceMuted }]}> 
                 <Text style={[Typography.caption, { color: palette.text }]}>{user.role || 'USER'}</Text>
@@ -63,7 +65,7 @@ export default function AdminUsersScreen() {
             </View>
             <View style={styles.cardActions}>
               <Button
-                title="Xoá"
+                title="Xóa"
                 variant="danger"
                 onPress={() => handleDeleteUser(user)}
               />
@@ -74,7 +76,7 @@ export default function AdminUsersScreen() {
 
       {!loading && users.length === 0 ? (
         <Card>
-          <Text style={[Typography.body, { color: palette.textMuted }]}>Chưa có dữ liệu người dùng.</Text>
+          <Text style={[Typography.body, { color: palette.textMuted }]}>Chưa có người dùng nào.</Text>
         </Card>
       ) : null}
     </AdminShell>

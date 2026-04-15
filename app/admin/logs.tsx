@@ -13,15 +13,14 @@ export default function AdminLogsScreen() {
   const { metrics, moderationQueue, weeklyPosts } = useAdminDashboard();
 
   const logLines = [
-    `${metrics.totalUsers} user records loaded into admin dashboard.`,
-    `${metrics.totalPosts} community posts available for moderation.`,
-    `${metrics.adminUsers} administrator accounts are currently active.`,
-    `${weeklyPosts.reduce((sum, item) => sum + item.count, 0)} posts detected in the last 7 days.`,
-    `${moderationQueue.length} items shown in the moderation queue snapshot.`,
+    `${metrics.totalUsers} hồ sơ người dùng đã được tải vào bảng điều khiển.`,
+    `${metrics.totalPosts} bài viết cộng đồng sẵn sàng để quản lý.`,
+    `${metrics.adminUsers} tài khoản quản trị viên đang hoạt động.`,
+    `Đã phát hiện ${weeklyPosts.reduce((sum, item) => sum + item.count, 0)} bài viết mới trong 7 ngày qua.`
   ];
 
   return (
-    <AdminShell title="System Logs" subtitle="Tổng hợp log vận hành và tín hiệu an toàn ngay trong khu vực admin.">
+    <AdminShell title="Nhật ký hệ thống" subtitle="Tổng hợp log vận hành và tín hiệu an toàn ngay trong khu vực admin.">
       {logLines.map((line, index) => (
         <Card key={line} style={styles.logCard}>
           <View style={[styles.logIcon, { backgroundColor: index % 2 === 0 ? '#E8F1EF' : '#F4E9D6' }]}>
@@ -32,7 +31,7 @@ export default function AdminLogsScreen() {
             />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={[Typography.caption, { color: palette.textMuted }]}>Log {String(index + 1).padStart(2, '0')}</Text>
+            <Text style={[Typography.caption, { color: palette.textMuted }]}>Nhật ký {String(index + 1).padStart(2, '0')}</Text>
             <Text style={[Typography.body, { color: palette.text }]}>{line}</Text>
           </View>
           <View style={[styles.okPill, { backgroundColor: '#E8F1EF' }]}>
