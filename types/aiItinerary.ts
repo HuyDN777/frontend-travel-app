@@ -5,11 +5,14 @@
 
 export type BudgetTier = 'low' | 'medium' | 'high';
 
+export type ActivityLevel = 'it' | 'vua';
+
 export type AiItineraryRequest = {
   destination: string;
   dayCount: number;
   preferences: string[];
   budgetTier: BudgetTier;
+  activityLevel?: ActivityLevel;
   /** ISO date bắt đầu (tuỳ chọn, để hiển thị ngữ cảnh) */
   startDate?: string;
 };

@@ -30,6 +30,7 @@ import { searchCityData } from '@/services/knowledgeService';
 import { applyDayPlansToDraft } from '@/stores/planDraftStore';
 import type {
   AiItineraryResponse,
+  ActivityLevel,
   BudgetTier,
   DayPlan,
   SuggestedActivity,
@@ -51,6 +52,7 @@ type CollectStep =
   | 'days'
   | 'preferences'
   | 'budget'
+  | 'activity'
   | 'startDate'
   | 'confirm'
   | 'idle';
@@ -67,6 +69,11 @@ const BUDGET_OPTIONS: { tier: BudgetTier; label: string }[] = [
   { tier: 'low', label: 'Tiết kiệm' },
   { tier: 'medium', label: 'Vừa phải' },
   { tier: 'high', label: 'Thoải mái' },
+];
+
+const ACTIVITY_LEVEL_OPTIONS: { level: ActivityLevel; label: string; description: string }[] = [
+  { level: 'it', label: 'Ít', description: '3 hoạt động/ngày' },
+  { level: 'vua', label: 'Vừa', description: '4-5 hoạt động/ngày' },
 ];
 
 let msgId = 0;
@@ -189,6 +196,23 @@ function extractBudgetTier(text: string): BudgetTier | null {
   return null;
 }
 
+function extractActivityLevel(text: string): ActivityLevel | null {
+  const n = stripVi(text);
+  if (/(^|\s)(it|few|light|nhe)(\s|$)/.test(n)) return 'it';
+  if (/(^|\s)(vua|normal|medium|balanced)(\s|$)/.test(n)) return 'vua';
+  return null;
+}
+
+function getActivityLevelCount(level: ActivityLevel | null | undefined): number {
+  if (level === 'it') return 3;
+  return 4;
+}
+
+function getActivityLevelLabel(level: ActivityLevel | null | undefined): string {
+  if (level === 'it') return 'Ít';
+  return 'Vừa';
+}
+
 function extractDayCount(text: string): number | null {
   const n = stripVi(text);
   const match = n.match(/(\d{1,2})\s*(ngay|day)/i);
@@ -197,6 +221,52 @@ function extractDayCount(text: string): number | null {
     return (num >= 1 && num <= 14) ? num : null;
   }
   return null;
+}
+
+function parseFlexibleStartDate(raw: string): string | null {
+  const input = raw.trim();
+
+  const dmy = input.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (dmy) {
+    const day = Number(dmy[1]);
+    const month = Number(dmy[2]);
+    const year = Number(dmy[3]);
+    const dt = new Date(year, month - 1, day);
+    if (
+      dt.getFullYear() === year &&
+      dt.getMonth() === month - 1 &&
+      dt.getDate() === day
+    ) {
+      const yyyy = String(year);
+      const mm = String(month).padStart(2, '0');
+      const dd = String(day).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    }
+    return null;
+  }
+
+  const ymd = input.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (ymd) {
+    const year = Number(ymd[1]);
+    const month = Number(ymd[2]);
+    const day = Number(ymd[3]);
+    const dt = new Date(year, month - 1, day);
+    if (
+      dt.getFullYear() === year &&
+      dt.getMonth() === month - 1 &&
+      dt.getDate() === day
+    ) {
+      return input;
+    }
+  }
+
+  return null;
+}
+
+function formatStartDateForUser(isoDate: string): string {
+  const m = isoDate.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return isoDate;
+  return `${m[3]}/${m[2]}/${m[1]}`;
 }
 
 function extractPrefsTags(text: string): string[] {
@@ -237,8 +307,9 @@ export default function AiItineraryScreen() {
 
   const [destination, setDestination] = useState('');
   const [dayCountStr, setDayCountStr] = useState('');
-  const [prefs, setPrefs] = useState<string[]>(['food', 'beach']);
+  const [prefs, setPrefs] = useState<string[]>([]);
   const [budgetTier, setBudgetTier] = useState<BudgetTier>('medium');
+  const [activityLevel, setActivityLevel] = useState<ActivityLevel | null>(null);
   const [startDate, setStartDate] = useState('');
   const [sessionId, setSessionId] = useState<number | undefined>(undefined);
 
@@ -316,7 +387,8 @@ export default function AiItineraryScreen() {
   const openEdit = (act: SuggestedActivity) => {
     const d = displayActivity(act);
     setEditTitle(d.title);
-    setEditDescription(d.description);
+    // Personal note should only contain user-entered note, not AI place description.
+    setEditDescription(activityEdits[act.id]?.description ?? '');
     setEditStartTime(d.startTime);
     setEditDuration(d.duration);
     setEditTarget(act);
@@ -344,7 +416,7 @@ export default function AiItineraryScreen() {
       return next;
     });
     setEditTitle(editTarget.title);
-    setEditDescription(editTarget.description ?? '');
+    setEditDescription('');
     setEditStartTime(editTarget.suggestedStart ?? '');
     setEditDuration(editTarget.estimatedDuration ?? '');
   };
@@ -394,32 +466,43 @@ export default function AiItineraryScreen() {
     );
   };
 
-  const goStartDate = (budgetLabel: string) => {
+  const goActivityLevel = (budgetLabel: string) => {
     append('user', budgetLabel);
-    setStep('startDate');
+    setStep('activity');
     append(
       'assistant',
-      'Bạn có **ngày bắt đầu** chuyến đi không? (định dạng YYYY-MM-DD, ví dụ 2026-04-10). Hoặc bấm **Bỏ qua**.',
+      'Bạn muốn lịch trình có **ít / vừa** hoạt động mỗi ngày? Chọn một mức bên dưới.',
     );
   };
 
-  const goConfirm = (dateLine: string, overrides?: { dest?: string, days?: string, prefs?: string[], budget?: BudgetTier, start?: string }) => {
+  const goStartDate = (activityLabel: string) => {
+    append('user', activityLabel);
+    setStep('startDate');
+    append(
+      'assistant',
+      'Bạn có **ngày bắt đầu** chuyến đi không? (định dạng DD/MM/YYYY, ví dụ 10/04/2026). Hoặc bấm **Bỏ qua**.',
+    );
+  };
+
+  const goConfirm = (dateLine: string, overrides?: { dest?: string, days?: string, prefs?: string[], budget?: BudgetTier, activity?: ActivityLevel, start?: string }) => {
     append('user', dateLine);
     
     const finalDest = overrides?.dest ?? destination;
     const finalDays = overrides?.days ?? dayCountStr;
     const finalPrefs = overrides?.prefs ?? prefs;
     const finalBudget = overrides?.budget ?? budgetTier;
+    const finalActivity = overrides?.activity ?? activityLevel;
     const finalStart = overrides?.start ?? startDate;
 
     const n = parseInt(finalDays, 10);
     const prefLine = PREFERENCE_OPTIONS.filter((o) => finalPrefs.includes(o.id)).map((o) => o.label).join(', ') || '—';
     const budgetLine = BUDGET_OPTIONS.find((x) => x.tier === finalBudget)?.label ?? '—';
-    const datePart = finalStart.trim() ? finalStart.trim() : 'Chưa nhập';
+    const activityLine = getActivityLevelLabel(finalActivity);
+    const datePart = finalStart.trim() ? formatStartDateForUser(finalStart.trim()) : 'Chưa nhập';
     
     append(
       'assistant',
-      `Mình tóm lại yêu cầu nhé:\n• Điểm đến: **${finalDest.trim()}**\n• Số ngày: **${n} ngày**\n• Sở thích: ${prefLine}\n• Ngân sách: **${budgetLine}**\n• Ngày bắt đầu: ${datePart}\n\nBạn bấm **Gợi ý lịch ngay** để mình gọi AI thiết kế, hoặc gõ lại nếu cần chỉnh.`,
+      `Mình tóm lại yêu cầu nhé:\n• Điểm đến: **${finalDest.trim()}**\n• Số ngày: **${n} ngày**\n• Sở thích: ${prefLine}\n• Ngân sách: **${budgetLine}**\n• Mức hoạt động: **${activityLine}**\n• Ngày bắt đầu: ${datePart}\n\nBạn bấm **Gợi ý lịch ngay** để mình gọi AI thiết kế, hoặc gõ lại nếu cần chỉnh.`,
     );
     setStep('confirm');
   };
@@ -441,12 +524,15 @@ export default function AiItineraryScreen() {
     const extractedDest = extractDestination(raw);
     const extractedDays = extractDayCount(raw);
     const extractedBudget = extractBudgetTier(raw);
+    const extractedActivity = extractActivityLevel(raw);
     const extractedPrefs = extractPrefsTags(raw);
 
     let updatedDest = destination;
     let updatedDays = dayCountStr;
     let updatedBudget = budgetTier;
+    let updatedActivity = activityLevel;
     let updatedPrefs = [...prefs];
+    let updatedStart = startDate;
 
     let feedbackParts: string[] = [];
 
@@ -487,6 +573,12 @@ export default function AiItineraryScreen() {
       feedbackParts.push(`ngân sách **${bLabel}**`);
     }
 
+    if (extractedActivity) {
+      updatedActivity = extractedActivity;
+      setActivityLevel(extractedActivity);
+      feedbackParts.push(`mức hoạt động **${getActivityLevelLabel(extractedActivity)}**`);
+    }
+
     if (extractedPrefs.length > 0) {
       updatedPrefs = extractedPrefs;
       setPrefs(extractedPrefs);
@@ -494,10 +586,12 @@ export default function AiItineraryScreen() {
       feedbackParts.push(`thích **${pLabels}**`);
     }
 
-    // Special check for Start Date
-    if (/^\d{4}-\d{2}-\d{2}$/.test(raw) && !Number.isNaN(Date.parse(raw))) {
-      setStartDate(raw);
-      feedbackParts.push(`ngày bắt đầu **${raw}**`);
+    // Special check for Start Date (ưu tiên DD/MM/YYYY; vẫn chấp nhận YYYY-MM-DD để tương thích)
+    const parsedStartDate = parseFlexibleStartDate(raw);
+    if (parsedStartDate) {
+      updatedStart = parsedStartDate;
+      setStartDate(parsedStartDate);
+      feedbackParts.push(`ngày bắt đầu **${formatStartDateForUser(parsedStartDate)}**`);
     }
 
     // 3. Acknowledge what we found
@@ -519,8 +613,8 @@ export default function AiItineraryScreen() {
       return;
     }
 
-    // Start checking for secondary info if not provided
-    if (updatedPrefs.length === 0 || (updatedPrefs.length === 2 && updatedPrefs.includes('food') && updatedPrefs.includes('beach') && !extractedPrefs.length)) {
+    // Follow intended flow: days -> preferences -> budget -> activity -> startDate -> confirm
+    if (updatedPrefs.length === 0) {
       if (step !== 'preferences') {
         setStep('preferences');
         append('assistant', 'Sở thích của bạn là gì? Bạn có thể chọn bên dưới hoặc gõ tự do (ví dụ "mạo hiểm", "văn hóa").');
@@ -528,10 +622,16 @@ export default function AiItineraryScreen() {
       }
     }
 
-    if (!extractedBudget && step !== 'budget' && step !== 'confirm') {
+    if (!updatedBudget && step !== 'budget' && step !== 'confirm') {
        setStep('budget');
        append('assistant', 'Bạn muốn mức **ngân sách** tham khảo nào? (Tiết kiệm, Vừa phải, Thoải mái)');
        return;
+    }
+
+    if (!updatedActivity) {
+      setStep('activity');
+      append('assistant', 'Bạn muốn lịch trình có **ít / vừa** hoạt động mỗi ngày? Chọn một mức bên dưới nhé.');
+      return;
     }
 
     // If everything is basically filled or user seems done
@@ -540,7 +640,9 @@ export default function AiItineraryScreen() {
         dest: updatedDest, 
         days: updatedDays, 
         budget: updatedBudget, 
-        prefs: updatedPrefs 
+        activity: updatedActivity ?? undefined,
+        prefs: updatedPrefs,
+        start: updatedStart,
       });
       return;
     }
@@ -583,6 +685,7 @@ export default function AiItineraryScreen() {
         dayCount: n,
         preferences: prefLabels,
         budgetTier,
+        activityLevel: activityLevel ?? 'vua',
         startDate: startDate.trim() || undefined,
       });
       setResult(res);
@@ -724,8 +827,9 @@ export default function AiItineraryScreen() {
     setInput('');
     setDestination('');
     setDayCountStr('');
-    setPrefs(['food', 'beach']);
+    setPrefs([]);
     setBudgetTier('medium');
+    setActivityLevel(null);
     setStartDate('');
     setResult(null);
     setAcceptedActivityIds(new Set());
@@ -803,7 +907,9 @@ export default function AiItineraryScreen() {
       : step === 'days'
         ? 'Số ngày (1–14)'
         : step === 'startDate'
-          ? 'YYYY-MM-DD hoặc dùng nút Bỏ qua'
+          ? 'DD/MM/YYYY hoặc dùng nút Bỏ qua'
+          : step === 'activity'
+              ? 'Chọn: Ít, Vừa'
           : step === 'confirm'
             ? 'Bấm nút “Gợi ý lịch ngay” phía trên hoặc gõ tin nhắn'
             : '…';
@@ -1138,7 +1244,7 @@ export default function AiItineraryScreen() {
                   key={b.tier}
                   onPress={() => {
                     setBudgetTier(b.tier);
-                    goStartDate(b.label);
+                    goActivityLevel(b.label);
                   }}
                   style={[
                     styles.budgetPill,
@@ -1149,6 +1255,30 @@ export default function AiItineraryScreen() {
                   ]}
                 >
                   <Text style={[Typography.caption, { color: palette.text, fontWeight: '700' }]}>{b.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+
+          {step === 'activity' ? (
+            <View style={styles.budgetRow}>
+              {ACTIVITY_LEVEL_OPTIONS.map((option) => (
+                <Pressable
+                  key={option.level}
+                  onPress={() => {
+                    setActivityLevel(option.level);
+                    goStartDate(option.label);
+                  }}
+                  style={[
+                    styles.budgetPill,
+                    {
+                      borderColor: activityLevel === option.level ? palette.accent : palette.border,
+                      backgroundColor: palette.surface,
+                    },
+                  ]}
+                >
+                  <Text style={[Typography.caption, { color: palette.text, fontWeight: '700' }]}>{option.label}</Text>
+                  <Text style={[Typography.caption, { color: palette.textMuted, marginTop: 2 }]}>{option.description}</Text>
                 </Pressable>
               ))}
             </View>
@@ -1193,7 +1323,7 @@ export default function AiItineraryScreen() {
             </View>
           ) : null}
 
-          {!result && step !== 'preferences' && step !== 'budget' && messages.length > 0 ? (
+          {!result && step !== 'preferences' && step !== 'budget' && step !== 'activity' && messages.length > 0 ? (
             <Pressable onPress={resetChat} style={styles.newChatText}>
               <Text style={[Typography.caption, { color: palette.textMuted }]}>Chat mới</Text>
             </Pressable>

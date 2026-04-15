@@ -10,6 +10,7 @@ import Constants from 'expo-constants';
 import type {
   AiItineraryRequest,
   AiItineraryResponse,
+  ActivityLevel,
   BudgetTier,
   SuggestedActivity,
   SuggestedDay,
@@ -147,6 +148,69 @@ type ChatMessage = {
   role: 'system' | 'user' | 'assistant';
   content: string;
 };
+
+function normalizeActivityLevel(level?: string): ActivityLevel {
+  const value = (level ?? '').trim().toLowerCase();
+  if (value === 'it' || value === 'few' || value === 'light') return 'it';
+  if (value === 'nhieu' || value === 'many' || value === 'full') return 'vua';
+  return 'vua';
+}
+
+function activityTargetCount(level?: string): number {
+  const normalized = normalizeActivityLevel(level);
+  if (normalized === 'it') return 3;
+  return 5;
+}
+
+function activityLevelLabel(level?: string): string {
+  const normalized = normalizeActivityLevel(level);
+  if (normalized === 'it') return 'ít';
+  return 'vừa';
+}
+
+function stripVi(s: string): string {
+  return s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'd')
+    .toLowerCase();
+}
+
+function isBeachPreference(pref: string): boolean {
+  const n = stripVi(pref);
+  return n.includes('beach') || n.includes('bien');
+}
+
+function adaptRequestForDestination(req: AiItineraryRequest): { adjusted: AiItineraryRequest; note?: string } {
+  const destinationNorm = stripVi(req.destination);
+  const isHanoi = destinationNorm.includes('ha noi') || destinationNorm.includes('hanoi');
+  const hasBeachPref = req.preferences.some((p) => isBeachPreference(p));
+
+  if (!isHanoi || !hasBeachPref) {
+    return { adjusted: req };
+  }
+
+  const filteredPrefs = req.preferences.filter((p) => !isBeachPreference(p));
+  const fallbackPrefs = filteredPrefs.length > 0 ? filteredPrefs : ['culture', 'food'];
+
+  return {
+    adjusted: {
+      ...req,
+      preferences: fallbackPrefs,
+    },
+    note:
+      'Lưu ý: Hà Nội không có biển, nên mình đã ưu tiên lịch trình theo hướng hồ, phố cổ, văn hóa và ẩm thực để phù hợp thực tế.',
+  };
+}
+
+function withSummaryNote(response: AiItineraryResponse, note?: string): AiItineraryResponse {
+  if (!note) return response;
+  return {
+    ...response,
+    summary: `${response.summary} ${note}`,
+  };
+}
 
 function buildSerpApiQuery(destination: string, category: 'tourism' | 'restaurant' | 'cafe'): string {
   const cleanDestination = destination.trim();
@@ -311,6 +375,7 @@ async function callOpenAiCompatibleChat(messages: ChatMessage[]): Promise<string
 function buildRagPrompt(req: AiItineraryRequest, tourism: LocalResult[], restaurants: LocalResult[], cafes: LocalResult[], knowledge: TourismItem[]): ChatMessage[] {
   const prefLine = req.preferences.length ? req.preferences.join(', ') : 'đa dạng';
   const budgetLine = req.budgetTier === 'low' ? 'tiết kiệm' : req.budgetTier === 'high' ? 'thoải mái' : 'vừa phải';
+  const activityLine = activityLevelLabel(req.activityLevel);
   const knowledgeLine = knowledge.length
     ? knowledge.slice(0, 6).map((item, index) => `${index + 1}. ${item.title} — ${item.paragraphs[0]?.context.slice(0, 180) ?? ''}`).join('\n')
     : 'Không có mục tri thức cục bộ phù hợp.';
@@ -327,6 +392,7 @@ function buildRagPrompt(req: AiItineraryRequest, tourism: LocalResult[], restaur
 Điểm đến: ${req.destination}
 Số ngày: ${req.dayCount}
 Ngân sách: ${budgetLine}
+Mức hoạt động: ${activityLine}
 Sở thích: ${prefLine}
 Ngày bắt đầu: ${req.startDate ?? 'không có'}
 
@@ -342,7 +408,8 @@ ${knowledgeLine}
 
 Yêu cầu:
 - Ưu tiên địa điểm thực tế trong ngữ cảnh trên.
-- Mỗi ngày 2-4 hoạt động, 1-2 nhà hàng/cafe.
+- Mỗi ngày cần số hoạt động theo mức: ít = 3, vừa = 5.
+- Ưu tiên phân bổ hoạt động theo nhịp sáng / trưa / chiều / tối sao cho tự nhiên.
 - Nếu có quán cafe phù hợp thì dùng cho bữa nghỉ/chill.
 - Nếu thiếu dữ liệu, vẫn tạo lịch trình hợp lý nhưng không bịa địa chỉ cụ thể.
 - Viết tiếng Việt tự nhiên, rõ ràng, phù hợp người dùng phổ thông.
@@ -497,6 +564,113 @@ function chooseByIndex<T>(items: T[], index: number): T | undefined {
   return items[index % items.length];
 }
 
+function localResultScoreByPreferences(item: LocalResult, preferences: string[]): number {
+  if (!preferences.length) return 0;
+
+  const text = stripVi(`${item.title ?? ''} ${item.type ?? ''} ${item.description ?? ''} ${item.address ?? ''}`);
+  let score = 0;
+
+  for (const pref of preferences) {
+    const p = stripVi(pref);
+    if (p === 'beach' || p === 'bien') {
+      if (/(bien|beach|cat|vinh|dao|hai dang|sam son|hai tien|hai hoa|hai thanh)/.test(text)) score += 10;
+      continue;
+    }
+    if (p === 'culture' || p === 'van hoa') {
+      if (/(bao tang|museum|di tich|chua|dinh|den|nha tho|lich su|heritage)/.test(text)) score += 10;
+      continue;
+    }
+    if (p === 'adventure' || p === 'mao hiem') {
+      if (/(dinh|nui|rung|thac|trekking|leo nui|cap treo|dong)/.test(text)) score += 10;
+      continue;
+    }
+    if (p === 'family' || p === 'gia dinh') {
+      if (/(cong vien|park|thieu nhi|vui choi|giai tri|so thu|sun world)/.test(text)) score += 10;
+      continue;
+    }
+    if (p === 'food' || p === 'am thuc') {
+      if (/(cho dem|am thuc|an uong|dac san|street food|nha hang)/.test(text)) score += 10;
+      continue;
+    }
+    if (p === 'chay') {
+      if (/(chay|vegan|vegetarian|thanh tinh)/.test(text)) score += 10;
+    }
+  }
+
+  return score;
+}
+
+function sortLocalResultsByPreferences(items: LocalResult[], preferences: string[]): LocalResult[] {
+  if (items.length <= 1) return [...items];
+  if (!preferences.length) return shuffle(items);
+
+  return [...items].sort((a, b) => {
+    const scoreA = localResultScoreByPreferences(a, preferences);
+    const scoreB = localResultScoreByPreferences(b, preferences);
+    if (scoreA !== scoreB) return scoreB - scoreA;
+
+    const ratingA = typeof a.rating === 'number' ? a.rating : 0;
+    const ratingB = typeof b.rating === 'number' ? b.rating : 0;
+    return ratingB - ratingA;
+  });
+}
+
+function hasPreference(preferences: string[], name: 'beach' | 'food' | 'culture' | 'adventure' | 'family' | 'chay'): boolean {
+  return preferences.some((pref) => {
+    const normalized = stripVi(pref);
+    if (name === 'beach') return normalized === 'beach' || normalized === 'bien';
+    if (name === 'food') return normalized === 'food' || normalized === 'am thuc';
+    if (name === 'culture') return normalized === 'culture' || normalized === 'van hoa';
+    if (name === 'adventure') return normalized === 'adventure' || normalized === 'mao hiem';
+    if (name === 'family') return normalized === 'family' || normalized === 'gia dinh';
+    return normalized === 'chay';
+  });
+}
+
+function findBeachCandidate(items: LocalResult[]): LocalResult | undefined {
+  return items.find((item) =>
+    /biển|beach|cát|vịnh|đảo|hải đăng|sầm sơn|sam son|hải tiến|hai tien|hải hòa|hai hoa|hải thanh|hai thanh/i.test(
+      stripVi(`${item.title ?? ''} ${item.type ?? ''} ${item.description ?? ''} ${item.address ?? ''}`),
+    ),
+  );
+}
+
+function findFoodCandidate(items: LocalResult[]): LocalResult | undefined {
+  return items.find((item) =>
+    /chợ đêm|ẩm thực|ăn uống|đặc sản|street food|nhà hàng|quán ăn|buffet|cafe|cà phê/i.test(
+      stripVi(`${item.title ?? ''} ${item.type ?? ''} ${item.description ?? ''} ${item.address ?? ''}`),
+    ),
+  );
+}
+
+function buildOrderedActivitiesFromPlaces(
+  dayIndex: number,
+  destination: string,
+  places: Array<{ place: LocalResult; category: 'tourism' | 'restaurant' | 'cafe' }>,
+  level: string | undefined,
+): SuggestedActivity[] {
+  const targetCount = Math.min(activityTargetCount(level), 5);
+  const activities: SuggestedActivity[] = [];
+
+  for (const [index, entry] of places.entries()) {
+    if (activities.length >= targetCount) break;
+    activities.push(toSuggestedPlaceActivity(dayIndex, index, entry.place, entry.category, destination));
+  }
+
+  while (activities.length < targetCount) {
+    const index = activities.length;
+    activities.push({
+      id: id('act', dayIndex, index),
+      title: `Khám phá ${destination}`,
+      description: `Bổ sung hoạt động theo mức ${activityLevelLabel(level)}.`,
+      estimatedDuration: index === 0 ? '2–3h' : index === 1 ? '1.5–2h' : '1–2h',
+      suggestedStart: index === 0 ? '08:30' : index === 1 ? '10:30' : index === 2 ? '14:30' : index === 3 ? '16:30' : index === 4 ? '18:30' : index === 5 ? '20:00' : '21:15',
+    });
+  }
+
+  return activities;
+}
+
 function buildDailyResults(
   req: AiItineraryRequest,
   tourism: LocalResult[],
@@ -506,31 +680,73 @@ function buildDailyResults(
   const dest = req.destination.trim();
   const vegetarian = req.preferences.some((p) => /chay|vegetarian|vegan/i.test(p));
   const maxDays = Math.min(req.dayCount, 14);
-  const tourismPool = shuffle(tourism);
-  const cafePool = shuffle(cafes);
-  const foodPool = shuffle(vegetarian ? [...cafes, ...restaurants] : [...restaurants, ...cafes]);
+  const activityTarget = activityTargetCount(req.activityLevel);
+  const wantsBeach = hasPreference(req.preferences, 'beach');
+  const wantsFood = hasPreference(req.preferences, 'food');
+  const tourismPool = sortLocalResultsByPreferences(tourism, req.preferences);
+  const cafePool = sortLocalResultsByPreferences(cafes, req.preferences);
+  const foodPool = sortLocalResultsByPreferences(
+    vegetarian ? [...cafes, ...restaurants] : [...restaurants, ...cafes],
+    req.preferences,
+  );
   const fallbackBudget = req.budgetTier === 'low' ? 'tiết kiệm' : req.budgetTier === 'high' ? 'thoải mái' : 'vừa phải';
 
   const days: SuggestedDay[] = [];
   for (let d = 1; d <= maxDays; d++) {
-    const activitySequence: Array<{ place: LocalResult; category: 'tourism' | 'restaurant' | 'cafe' }> = [];
-    const firstTour = tourismPool[(d - 1) * 2];
-    const secondTour = tourismPool[(d - 1) * 2 + 1];
-    const middayCafe = chooseByIndex(cafePool, d - 1) ?? chooseByIndex(foodPool, d - 1);
-    const eveningFood = chooseByIndex(foodPool, d - 1);
+    const beachCandidate = wantsBeach ? findBeachCandidate(tourismPool) : undefined;
+    const foodCandidate = wantsFood ? findFoodCandidate(foodPool) ?? chooseByIndex(foodPool, d - 1) ?? chooseByIndex(cafePool, d - 1) : undefined;
+    const firstTour = tourismPool[(d - 1) * 3];
+    const secondTour = tourismPool[(d - 1) * 3 + 1];
+    const thirdTour = tourismPool[(d - 1) * 3 + 2];
+    const morningFood = chooseByIndex(cafePool, d - 1) ?? chooseByIndex(foodPool, d - 1);
+    const middayFood = chooseByIndex(foodPool, d - 1);
+    const eveningFood = chooseByIndex(foodPool, d);
+    const extraFoodFocus = wantsFood ? chooseByIndex(foodPool, d + 1) ?? chooseByIndex(cafePool, d) : undefined;
 
+    const activitySequence: Array<{ place: LocalResult; category: 'tourism' | 'restaurant' | 'cafe' }> = [];
     if (firstTour) activitySequence.push({ place: firstTour, category: 'tourism' });
-    if (middayCafe) {
+    if (activitySequence.length < activityTarget && morningFood) {
       activitySequence.push({
-        place: middayCafe,
-        category: cafes.includes(middayCafe) ? 'cafe' : 'restaurant',
+        place: morningFood,
+        category: cafes.includes(morningFood) ? 'cafe' : 'restaurant',
       });
     }
-    if (secondTour) activitySequence.push({ place: secondTour, category: 'tourism' });
+    if (activitySequence.length < activityTarget && secondTour) activitySequence.push({ place: secondTour, category: 'tourism' });
+    if (activitySequence.length < activityTarget && middayFood) {
+      activitySequence.push({
+        place: middayFood,
+        category: cafes.includes(middayFood) ? 'cafe' : 'restaurant',
+      });
+    }
+    if (activitySequence.length < activityTarget && thirdTour) activitySequence.push({ place: thirdTour, category: 'tourism' });
+    if (activitySequence.length < activityTarget && eveningFood) {
+      activitySequence.push({
+        place: eveningFood,
+        category: cafes.includes(eveningFood) ? 'cafe' : 'restaurant',
+      });
+    }
 
-    const activities = activitySequence.map((entry, idx) =>
-      toSuggestedPlaceActivity(d, idx, entry.place, entry.category, dest),
-    );
+    if (d === 1 && beachCandidate) {
+      const existingBeachIndex = activitySequence.findIndex((entry) => entry.place === beachCandidate);
+      if (existingBeachIndex >= 0) {
+        activitySequence.splice(existingBeachIndex, 1);
+      }
+      activitySequence.unshift({ place: beachCandidate, category: 'tourism' });
+    }
+
+    if (wantsFood && foodCandidate) {
+      const existingFoodIndex = activitySequence.findIndex((entry) => entry.place === foodCandidate);
+      if (existingFoodIndex >= 0) {
+        activitySequence.splice(existingFoodIndex, 1);
+      }
+      const insertIndex = d === 1 && beachCandidate ? 1 : 0;
+      activitySequence.splice(Math.min(insertIndex, activitySequence.length), 0, {
+        place: foodCandidate,
+        category: cafes.includes(foodCandidate) ? 'cafe' : 'restaurant',
+      });
+    }
+
+    const activities = buildOrderedActivitiesFromPlaces(d, dest, activitySequence, req.activityLevel);
 
     const mappedFoodSource = eveningFood ?? chooseByIndex(foodPool, d - 1);
     const mappedFood = mappedFoodSource ? [mappedFoodSource].map((place, idx) => {
@@ -576,7 +792,7 @@ function buildDailyResults(
   const budgetVi = req.budgetTier === 'low' ? 'tiết kiệm' : req.budgetTier === 'high' ? 'thoải mái' : 'vừa phải';
 
   return {
-    summary: `Chào Hà! Mình đã tổng hợp gợi ý ${req.dayCount} ngày tại ${dest} từ SerpApi. Ngân sách: ${budgetVi}, sở thích: ${prefLine}.`,
+    summary: `Chào bạn! Mình đã tổng hợp gợi ý ${req.dayCount} ngày tại ${dest} từ SerpApi. Ngân sách: ${budgetVi}, sở thích: ${prefLine}.`,
     days,
     generatedAt: new Date().toISOString(),
   };
@@ -742,33 +958,62 @@ function genericDay(
   destination: string,
   vegetarian: boolean,
   budget: BudgetTier,
+  activityCount: number = 3,
 ): { activities: SuggestedActivity[]; restaurants: SuggestedRestaurant[] } {
   const budgetHint =
     budget === 'low' ? 'ưu tiên điểm miễn phí / giá mềm' : budget === 'high' ? 'có thể thêm tour riêng' : 'cân bằng chi phí';
+  const templates: Array<{ title: string; description: string; estimatedDuration: string; suggestedStart: string }> = [
+    {
+      title: `Tham quan trung tâm ${destination}`,
+      description: `Buổi sáng: đi bộ khu trung tâm, ${budgetHint}.`,
+      estimatedDuration: '2–3h',
+      suggestedStart: '09:00',
+    },
+    {
+      title: `Điểm nổi bật địa phương`,
+      description: 'Khám phá cảnh quan, bảo tàng hoặc công viên.',
+      estimatedDuration: '1.5–2h',
+      suggestedStart: '10:30',
+    },
+    {
+      title: 'Ăn trưa và nghỉ ngơi',
+      description: 'Thử món đặc sản, nghỉ nhẹ trước buổi chiều.',
+      estimatedDuration: '1.5h',
+      suggestedStart: '12:00',
+    },
+    {
+      title: 'Hoạt động buổi chiều',
+      description: 'Dạo phố, check-in hoặc ghé điểm vui chơi gần đó.',
+      estimatedDuration: '2h',
+      suggestedStart: '14:30',
+    },
+    {
+      title: 'Cafe / thư giãn',
+      description: 'Nghỉ chân và tận hưởng không khí địa phương.',
+      estimatedDuration: '1h',
+      suggestedStart: '16:30',
+    },
+    {
+      title: 'Bữa tối và dạo phố',
+      description: 'Ăn tối, đi bộ buổi tối, xem phố đêm.',
+      estimatedDuration: '1.5h',
+      suggestedStart: '18:30',
+    },
+    {
+      title: 'Hoạt động nhẹ buổi tối',
+      description: 'Tùy năng lượng, có thể thêm chợ đêm hoặc ngắm cảnh đêm.',
+      estimatedDuration: '1h',
+      suggestedStart: '20:00',
+    },
+  ];
   return {
-    activities: [
-      {
-        id: id('act', dayIndex, 0),
-        title: `Tham quan trung tâm ${destination}`,
-        description: `Buổi sáng: đi bộ khu trung tâm, ${budgetHint}.`,
-        estimatedDuration: '2–3h',
-        suggestedStart: '09:00',
-      },
-      {
-        id: id('act', dayIndex, 1),
-        title: `Điểm nổi bật địa phương`,
-        description: 'Chiều: museum, công viên hoặc viewpoint — tuỳ sở thích.',
-        estimatedDuration: '2h',
-        suggestedStart: '14:00',
-      },
-      {
-        id: id('act', dayIndex, 2),
-        title: 'Ẩm thực & nghỉ ngơi',
-        description: 'Tối: thử món đặc sản, dạo phố.',
-        estimatedDuration: '2h',
-        suggestedStart: '18:30',
-      },
-    ],
+    activities: templates.slice(0, Math.min(activityCount, templates.length)).map((item, index) => ({
+      id: id('act', dayIndex, index),
+      title: item.title,
+      description: item.description,
+      estimatedDuration: item.estimatedDuration,
+      suggestedStart: item.suggestedStart,
+    })),
     restaurants: vegetarian
       ? [
           { id: id('rest', dayIndex, 0), name: 'Nhà hàng chay địa phương', note: 'Đặt bàn nếu cuối tuần' },
@@ -808,6 +1053,7 @@ async function buildResponseFromKnowledge(req: AiItineraryRequest): Promise<AiIt
   const dest = req.destination.trim();
   const vegetarian = req.preferences.some((p) => /chay|vegetarian|vegan/i.test(p));
   const maxDays = Math.min(req.dayCount, 14);
+  const activityTarget = activityTargetCount(req.activityLevel);
 
   // 1. Thử lấy dữ liệu từ các bộ Dataset thành phố mới (8 thành phố)
   const cityTourism = searchCityData(dest, 'tourism');
@@ -817,17 +1063,17 @@ async function buildResponseFromKnowledge(req: AiItineraryRequest): Promise<AiIt
   const days: SuggestedDay[] = [];
 
   if (cityTourism.length > 0 || cityRestaurants.length > 0 || cityCafes.length > 0) {
-    // SỬ DỤNG DỮ LIỆU THÀNH PHỐ MỚI
-    const shuffledTourism = shuffle(cityTourism);
-    const shuffledRestaurants = shuffle(cityRestaurants);
-    const shuffledCafes = shuffle(cityCafes);
-    const shuffledFood = shuffle([...cityRestaurants, ...cityCafes]);
+    // SỬ DỤNG DỮ LIỆU THÀNH PHỐ MỚI (ưu tiên theo sở thích để tránh bỏ sót điểm phù hợp như Sầm Sơn khi chọn đi biển)
+    const prioritizedTourism = sortLocalResultsByPreferences(cityTourism, req.preferences);
+    const prioritizedRestaurants = sortLocalResultsByPreferences(cityRestaurants, req.preferences);
+    const prioritizedCafes = sortLocalResultsByPreferences(cityCafes, req.preferences);
+    const prioritizedFood = sortLocalResultsByPreferences([...cityRestaurants, ...cityCafes], req.preferences);
 
     for (let d = 1; d <= maxDays; d++) {
-      const firstTour = shuffledTourism[(d - 1) * 2];
-      const secondTour = shuffledTourism[(d - 1) * 2 + 1];
-      const dayCafe = chooseByIndex(shuffledCafes, d - 1) ?? chooseByIndex(shuffledFood, d - 1);
-      const dayRest1 = chooseByIndex(shuffledRestaurants, d - 1) ?? chooseByIndex(shuffledFood, d - 1);
+      const firstTour = prioritizedTourism[(d - 1) * 2];
+      const secondTour = prioritizedTourism[(d - 1) * 2 + 1];
+      const dayCafe = chooseByIndex(prioritizedCafes, d - 1) ?? chooseByIndex(prioritizedFood, d - 1);
+      const dayRest1 = chooseByIndex(prioritizedRestaurants, d - 1) ?? chooseByIndex(prioritizedFood, d - 1);
 
       const activities: SuggestedActivity[] = [];
       if (firstTour) {
@@ -849,7 +1095,7 @@ async function buildResponseFromKnowledge(req: AiItineraryRequest): Promise<AiIt
       }
 
       // Gợi ý nhà hàng / quán cafe xen kẽ theo ngày
-      const dayRest2 = chooseByIndex(shuffledFood, d);
+      const dayRest2 = chooseByIndex(prioritizedFood, d);
 
       const restaurants: SuggestedRestaurant[] = [];
       if (dayRest1) {
@@ -898,7 +1144,7 @@ async function buildResponseFromKnowledge(req: AiItineraryRequest): Promise<AiIt
     if (items.length === 0) {
       // 3. FALLBACK CUỐI: Dùng mock generic
       for (let d = 1; d <= maxDays; d++) {
-        const { activities, restaurants } = genericDay(d, dest, vegetarian, req.budgetTier);
+        const { activities, restaurants } = genericDay(d, dest, vegetarian, req.budgetTier, activityTarget);
         days.push({
           dayIndex: d,
           label: req.startDate ? formatDayLabel(req.startDate, d - 1) : `Ngày ${d}`,
@@ -912,49 +1158,21 @@ async function buildResponseFromKnowledge(req: AiItineraryRequest): Promise<AiIt
 
       for (let d = 1; d <= maxDays; d++) {
         const dayItems = items.slice((d - 1) * itemsPerDay, d * itemsPerDay);
-        const primaryItem = dayItems[0];
-        const secondaryItem = dayItems[1];
-        const tertiaryItem = dayItems[2];
+        const activities: SuggestedActivity[] = dayItems.slice(0, activityTarget).map((item, idx) => ({
+          id: id('act', d, idx),
+          title: item.title,
+          description: item.paragraphs[0]?.context.substring(0, 150) + '...',
+          estimatedDuration: idx === 0 ? '2-3h' : idx === 1 ? '45m-1.5h' : '1.5-2h',
+          suggestedStart: idx === 0 ? '08:30' : idx === 1 ? '10:30' : idx === 2 ? '14:30' : idx === 3 ? '16:30' : idx === 4 ? '18:30' : idx === 5 ? '20:00' : '21:15',
+        }));
 
-        const activities: SuggestedActivity[] = [];
-        if (primaryItem) {
+        while (activities.length < activityTarget) {
           activities.push({
             id: id('act', d, activities.length),
-            title: primaryItem.title,
-            description: primaryItem.paragraphs[0]?.context.substring(0, 150) + '...',
-            estimatedDuration: '2-3h',
-            suggestedStart: '08:30',
-          });
-        }
-
-        const cafeActivity = secondaryItem ?? tertiaryItem;
-        if (cafeActivity) {
-          activities.push({
-            id: id('act', d, activities.length),
-            title: cafeActivity.title,
-            description: cafeActivity.paragraphs[0]?.context.substring(0, 150) + '...',
-            estimatedDuration: '45m-1.5h',
-            suggestedStart: '10:30',
-          });
-        }
-
-        if (tertiaryItem) {
-          activities.push({
-            id: id('act', d, activities.length),
-            title: tertiaryItem.title,
-            description: tertiaryItem.paragraphs[0]?.context.substring(0, 150) + '...',
-            estimatedDuration: '2-3h',
-            suggestedStart: '14:30',
-          });
-        }
-
-        if (activities.length === 0) {
-          activities.push({
-            id: id('act', d, 0),
-            title: `Khám phá ẩm thực ${dest}`,
-            description: 'Thưởng thức các món ăn địa phương đặc sắc.',
-            estimatedDuration: '2h',
-            suggestedStart: '18:30',
+            title: `Khám phá ${dest}`,
+            description: `Bổ sung hoạt động theo mức ${activityLevelLabel(req.activityLevel)}.`,
+            estimatedDuration: '1.5-2h',
+            suggestedStart: activities.length === 0 ? '09:00' : activities.length === 1 ? '11:00' : activities.length === 2 ? '14:00' : activities.length === 3 ? '16:00' : '18:30',
           });
         }
 
@@ -976,7 +1194,7 @@ async function buildResponseFromKnowledge(req: AiItineraryRequest): Promise<AiIt
     req.budgetTier === 'low' ? 'tiết kiệm' : req.budgetTier === 'high' ? 'thoải mái' : 'vừa phải';
 
   return {
-    summary: `Chào Hà! Mình đã thiết kế lịch trình ${req.dayCount} ngày tại ${dest} cho bạn. Ngân sách: ${budgetVi}, sở thích: ${prefLine}. Dữ liệu được lấy từ kho tri thức du lịch Việt Nam mới nhất.`,
+    summary: `Chào bạn! Mình đã thiết kế lịch trình ${req.dayCount} ngày tại ${dest} cho bạn. Ngân sách: ${budgetVi}, sở thích: ${prefLine}, mức hoạt động: ${activityLevelLabel(req.activityLevel)}. Dữ liệu được lấy từ kho tri thức du lịch Việt Nam mới nhất.`,
     days,
     generatedAt: new Date().toISOString(),
   };
@@ -1002,12 +1220,15 @@ async function buildResponseFromSerpApi(req: AiItineraryRequest): Promise<AiItin
  * Gọi backend AI nếu có EXPO_PUBLIC_AI_ITINERARY_URL; ngược lại dùng mock có cấu trúc giống contract API.
  */
 export async function requestAiItinerary(req: AiItineraryRequest): Promise<AiItineraryResponse> {
-  const llmResponse = await buildResponseFromLlm(req);
-  if (llmResponse) return llmResponse;
+  const { adjusted, note } = adaptRequestForDestination(req);
+
+  const llmResponse = await buildResponseFromLlm(adjusted);
+  if (llmResponse) return withSummaryNote(llmResponse, note);
 
   if (SERPAPI_KEY) {
     try {
-      return await buildResponseFromSerpApi(req);
+      const serpResponse = await buildResponseFromSerpApi(adjusted);
+      return withSummaryNote(serpResponse, note);
     } catch {
       // Tiếp tục fallback bên dưới.
     }
@@ -1018,20 +1239,22 @@ export async function requestAiItinerary(req: AiItineraryRequest): Promise<AiIti
       const res = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(req),
+        body: JSON.stringify(adjusted),
       });
       if (!res.ok) throw new Error(`AI itinerary HTTP ${res.status}`);
       const data = (await res.json()) as AiItineraryResponse;
       if (!data?.days?.length) throw new Error('Phản hồi AI không hợp lệ');
-      return data;
+      return withSummaryNote(data, note);
     } catch {
       await delay(500 + Math.floor(Math.random() * 400));
-      return buildResponseFromKnowledge(req);
+      const kbResponse = await buildResponseFromKnowledge(adjusted);
+      return withSummaryNote(kbResponse, note);
     }
   }
 
   await delay(900 + Math.floor(Math.random() * 600));
-  return buildResponseFromKnowledge(req);
+  const kbResponse = await buildResponseFromKnowledge(adjusted);
+  return withSummaryNote(kbResponse, note);
 }
 
 export async function requestCityDataSuggestions(
