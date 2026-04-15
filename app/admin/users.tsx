@@ -64,11 +64,13 @@ export default function AdminUsersScreen() {
               </View>
             </View>
             <View style={styles.cardActions}>
-              <Button
-                title="Xóa"
-                variant="danger"
-                onPress={() => handleDeleteUser(user)}
-              />
+              {!isAdmin && (
+                <Button
+                  title="Xóa"
+                  variant="danger"
+                  onPress={() => handleDeleteUser(user)}
+                />
+              )}
             </View>
           </Card>
         );
