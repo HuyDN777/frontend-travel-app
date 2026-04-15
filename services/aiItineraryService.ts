@@ -466,6 +466,37 @@ function toSuggestedRestaurant(
   };
 }
 
+function toSuggestedPlaceActivity(
+  dayIndex: number,
+  index: number,
+  place: LocalResult,
+  category: 'tourism' | 'restaurant' | 'cafe',
+  destination: string,
+): SuggestedActivity {
+  const label = placeTypeLabel(category, place);
+  const duration = category === 'tourism' ? '1.5–2.5h' : category === 'cafe' ? '45m–1.5h' : '1–2h';
+  const startTime = category === 'tourism' ? (index === 0 ? '08:30' : '14:00') : category === 'cafe' ? '10:30' : '18:30';
+
+  return {
+    id: id('act', dayIndex, index),
+    title: place.title,
+    description: place.description || `${label} tại ${destination}`,
+    estimatedDuration: duration,
+    suggestedStart: startTime,
+    address: place.address,
+    type: place.type ?? label,
+    rating: place.rating,
+    reviews: place.reviews,
+    thumbnail: place.thumbnail,
+    mapLink: getMapLink(place.title, place.place_id),
+  };
+}
+
+function chooseByIndex<T>(items: T[], index: number): T | undefined {
+  if (items.length === 0) return undefined;
+  return items[index % items.length];
+}
+
 function buildDailyResults(
   req: AiItineraryRequest,
   tourism: LocalResult[],
@@ -475,19 +506,37 @@ function buildDailyResults(
   const dest = req.destination.trim();
   const vegetarian = req.preferences.some((p) => /chay|vegetarian|vegan/i.test(p));
   const maxDays = Math.min(req.dayCount, 14);
-  const foodPool = vegetarian ? [...cafes, ...restaurants] : [...restaurants, ...cafes];
+  const tourismPool = shuffle(tourism);
+  const cafePool = shuffle(cafes);
+  const foodPool = shuffle(vegetarian ? [...cafes, ...restaurants] : [...restaurants, ...cafes]);
   const fallbackBudget = req.budgetTier === 'low' ? 'tiết kiệm' : req.budgetTier === 'high' ? 'thoải mái' : 'vừa phải';
 
   const days: SuggestedDay[] = [];
   for (let d = 1; d <= maxDays; d++) {
-    const activitySlice = tourism.slice((d - 1) * 3, (d - 1) * 3 + 3);
-    const activities = activitySlice.map((place, idx) => toSuggestedActivity(d, idx, place, dest));
+    const activitySequence: Array<{ place: LocalResult; category: 'tourism' | 'restaurant' | 'cafe' }> = [];
+    const firstTour = tourismPool[(d - 1) * 2];
+    const secondTour = tourismPool[(d - 1) * 2 + 1];
+    const middayCafe = chooseByIndex(cafePool, d - 1) ?? chooseByIndex(foodPool, d - 1);
+    const eveningFood = chooseByIndex(foodPool, d - 1);
 
-    const restaurantSlice = foodPool.slice((d - 1) * 2, (d - 1) * 2 + 2);
-    const mappedFood = restaurantSlice.map((place, idx) => {
+    if (firstTour) activitySequence.push({ place: firstTour, category: 'tourism' });
+    if (middayCafe) {
+      activitySequence.push({
+        place: middayCafe,
+        category: cafes.includes(middayCafe) ? 'cafe' : 'restaurant',
+      });
+    }
+    if (secondTour) activitySequence.push({ place: secondTour, category: 'tourism' });
+
+    const activities = activitySequence.map((entry, idx) =>
+      toSuggestedPlaceActivity(d, idx, entry.place, entry.category, dest),
+    );
+
+    const mappedFoodSource = eveningFood ?? chooseByIndex(foodPool, d - 1);
+    const mappedFood = mappedFoodSource ? [mappedFoodSource].map((place, idx) => {
       const category = cafes.includes(place) ? 'cafe' : 'restaurant';
       return toSuggestedRestaurant(d, idx, place, category);
-    });
+    }) : [];
 
     if (activities.length === 0) {
       activities.push({
@@ -767,35 +816,40 @@ async function buildResponseFromKnowledge(req: AiItineraryRequest): Promise<AiIt
 
   const days: SuggestedDay[] = [];
 
-  if (cityTourism.length > 0) {
+  if (cityTourism.length > 0 || cityRestaurants.length > 0 || cityCafes.length > 0) {
     // SỬ DỤNG DỮ LIỆU THÀNH PHỐ MỚI
     const shuffledTourism = shuffle(cityTourism);
+    const shuffledRestaurants = shuffle(cityRestaurants);
+    const shuffledCafes = shuffle(cityCafes);
     const shuffledFood = shuffle([...cityRestaurants, ...cityCafes]);
 
     for (let d = 1; d <= maxDays; d++) {
-      // Mỗi ngày lấy 3-4 địa điểm tham quan
-      const dayActivitiesRaw = shuffledTourism.slice((d - 1) * 3, d * 3 + 1); // 4 items (idx 0 to 3)
-      const activities: SuggestedActivity[] = dayActivitiesRaw.map((item, idx) => ({
-        id: id('act', d, idx),
-        title: item.title,
-        description: item.description || `${item.type || 'Địa điểm'} tại ${dest}`,
-        estimatedDuration: '1.5-2h',
-        suggestedStart: 
-          idx === 0 ? '08:30' : 
-          idx === 1 ? '10:30' : 
-          idx === 2 ? '14:30' : '16:30',
-        rating: item.rating,
-        reviews: item.reviews,
-        thumbnail: item.thumbnail,
-        mapLink: getMapLink(item.title, item.place_id),
-      }));
+      const firstTour = shuffledTourism[(d - 1) * 2];
+      const secondTour = shuffledTourism[(d - 1) * 2 + 1];
+      const dayCafe = chooseByIndex(shuffledCafes, d - 1) ?? chooseByIndex(shuffledFood, d - 1);
+      const dayRest1 = chooseByIndex(shuffledRestaurants, d - 1) ?? chooseByIndex(shuffledFood, d - 1);
 
-      // Gợi ý nhà hàng
-      const restIdx = (d - 1) * 2 % (shuffledFood.length || 1);
-      const restIdx2 = (d - 1) * 2 + 1 % (shuffledFood.length || 1);
-      
-      const dayRest1 = shuffledFood[restIdx];
-      const dayRest2 = shuffledFood[restIdx2];
+      const activities: SuggestedActivity[] = [];
+      if (firstTour) {
+        activities.push(toSuggestedPlaceActivity(d, activities.length, firstTour, 'tourism', dest));
+      }
+      if (dayCafe) {
+        activities.push(
+          toSuggestedPlaceActivity(
+            d,
+            activities.length,
+            dayCafe,
+            cafes.includes(dayCafe) ? 'cafe' : 'restaurant',
+            dest,
+          ),
+        );
+      }
+      if (secondTour) {
+        activities.push(toSuggestedPlaceActivity(d, activities.length, secondTour, 'tourism', dest));
+      }
+
+      // Gợi ý nhà hàng / quán cafe xen kẽ theo ngày
+      const dayRest2 = chooseByIndex(shuffledFood, d);
 
       const restaurants: SuggestedRestaurant[] = [];
       if (dayRest1) {
@@ -853,22 +907,50 @@ async function buildResponseFromKnowledge(req: AiItineraryRequest): Promise<AiIt
         });
       }
     } else {
-      // Phân bổ các item tìm được vào các ngày
+      // Phân bổ các item tìm được vào các ngày theo kiểu xen kẽ địa điểm / cafe / nhà hàng
       const itemsPerDay = Math.ceil(items.length / maxDays);
 
       for (let d = 1; d <= maxDays; d++) {
-        const dayItems = items.slice((d - 1) * itemsPerDay, d * itemsPerDay).slice(0, 3);
-        const activities: SuggestedActivity[] = dayItems.map((item, idx) => ({
-          id: id('act', d, idx),
-          title: item.title,
-          description: item.paragraphs[0]?.context.substring(0, 150) + '...',
-          estimatedDuration: '2-3h',
-          suggestedStart: idx === 0 ? '08:30' : idx === 1 ? '14:00' : '19:00',
-        }));
+        const dayItems = items.slice((d - 1) * itemsPerDay, d * itemsPerDay);
+        const primaryItem = dayItems[0];
+        const secondaryItem = dayItems[1];
+        const tertiaryItem = dayItems[2];
 
-        if (activities.length < 2) {
+        const activities: SuggestedActivity[] = [];
+        if (primaryItem) {
           activities.push({
             id: id('act', d, activities.length),
+            title: primaryItem.title,
+            description: primaryItem.paragraphs[0]?.context.substring(0, 150) + '...',
+            estimatedDuration: '2-3h',
+            suggestedStart: '08:30',
+          });
+        }
+
+        const cafeActivity = secondaryItem ?? tertiaryItem;
+        if (cafeActivity) {
+          activities.push({
+            id: id('act', d, activities.length),
+            title: cafeActivity.title,
+            description: cafeActivity.paragraphs[0]?.context.substring(0, 150) + '...',
+            estimatedDuration: '45m-1.5h',
+            suggestedStart: '10:30',
+          });
+        }
+
+        if (tertiaryItem) {
+          activities.push({
+            id: id('act', d, activities.length),
+            title: tertiaryItem.title,
+            description: tertiaryItem.paragraphs[0]?.context.substring(0, 150) + '...',
+            estimatedDuration: '2-3h',
+            suggestedStart: '14:30',
+          });
+        }
+
+        if (activities.length === 0) {
+          activities.push({
+            id: id('act', d, 0),
             title: `Khám phá ẩm thực ${dest}`,
             description: 'Thưởng thức các món ăn địa phương đặc sắc.',
             estimatedDuration: '2h',
@@ -889,7 +971,6 @@ async function buildResponseFromKnowledge(req: AiItineraryRequest): Promise<AiIt
       }
     }
   }
-
   const prefLine = req.preferences.length ? req.preferences.join(', ') : 'đa dạng';
   const budgetVi =
     req.budgetTier === 'low' ? 'tiết kiệm' : req.budgetTier === 'high' ? 'thoải mái' : 'vừa phải';

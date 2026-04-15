@@ -35,6 +35,8 @@ import type {
   SuggestedActivity,
   SuggestedDay,
 } from '@/types/aiItinerary';
+import { createTrip } from '@/utils/api';
+import { getSessionUserId } from '@/utils/session';
 
 type ChatRole = 'user' | 'assistant';
 
@@ -241,6 +243,7 @@ export default function AiItineraryScreen() {
   const [sessionId, setSessionId] = useState<number | undefined>(undefined);
 
   const [loading, setLoading] = useState(false);
+  const [savingTrip, setSavingTrip] = useState(false);
   const [result, setResult] = useState<AiItineraryResponse | null>(null);
   const [acceptedActivityIds, setAcceptedActivityIds] = useState<Set<string>>(new Set());
   const [activityEdits, setActivityEdits] = useState<
@@ -262,7 +265,7 @@ export default function AiItineraryScreen() {
         id: nextId(),
         role: 'assistant',
         text:
-          'Chào Hà! Mình là trợ lý AI thiết kế lịch trình.\n\n' +
+          'Chào bạn! Mình là trợ lý AI thiết kế lịch trình.\n\n' +
           'Để bắt đầu, bạn muốn đi **đâu**? Hãy gõ tên thành phố hoặc chọn gợi ý bên dưới nhé.',
       },
     ]);
@@ -293,6 +296,21 @@ export default function AiItineraryScreen() {
       };
     },
     [activityEdits],
+  );
+
+  const parseStartMinutes = useCallback((value?: string) => {
+    if (!value) return Number.POSITIVE_INFINITY;
+    const match = value.trim().match(/^(\d{1,2}):(\d{2})/);
+    if (!match) return Number.POSITIVE_INFINITY;
+    const hour = Number(match[1]);
+    const minute = Number(match[2]);
+    if (Number.isNaN(hour) || Number.isNaN(minute)) return Number.POSITIVE_INFINITY;
+    return hour * 60 + minute;
+  }, []);
+
+  const sortByStartTime = useCallback(
+    (items: SuggestedActivity[]) => [...items].sort((a, b) => parseStartMinutes(a.suggestedStart) - parseStartMinutes(b.suggestedStart)),
+    [parseStartMinutes],
   );
 
   const openEdit = (act: SuggestedActivity) => {
@@ -401,7 +419,7 @@ export default function AiItineraryScreen() {
     
     append(
       'assistant',
-      `Chào Hà, mình tóm lại yêu cầu nhé:\n• Điểm đến: **${finalDest.trim()}**\n• Số ngày: **${n} ngày**\n• Sở thích: ${prefLine}\n• Ngân sách: **${budgetLine}**\n• Ngày bắt đầu: ${datePart}\n\nBạn bấm **Gợi ý lịch ngay** để mình gọi AI thiết kế, hoặc gõ lại nếu cần chỉnh.`,
+      `Mình tóm lại yêu cầu nhé:\n• Điểm đến: **${finalDest.trim()}**\n• Số ngày: **${n} ngày**\n• Sở thích: ${prefLine}\n• Ngân sách: **${budgetLine}**\n• Ngày bắt đầu: ${datePart}\n\nBạn bấm **Gợi ý lịch ngay** để mình gọi AI thiết kế, hoặc gõ lại nếu cần chỉnh.`,
     );
     setStep('confirm');
   };
@@ -444,7 +462,7 @@ export default function AiItineraryScreen() {
 
         const errorMsg = (isNumeric || isTrash)
           ? `⚠️ **Lỗi: Không nhận diện được địa danh.**\n\nHệ thống không tìm thấy địa điểm **'${raw}'** trong danh sách hỗ trợ.\n\nBạn hãy gõ tên tỉnh/thành phố (ví dụ: Hà Nội, Đà Nẵng, Phú Quốc...) hoặc chọn gợi ý bên dưới giúp mình nhé.`
-          : `Xin lỗi Hà, hiện tại mình mới chỉ hỗ trợ dữ liệu cho 12 tỉnh/thành phố phổ biến: ${SUPPORTED_CITIES_CANON.join(', ')}.\n\nĐịa điểm **'${extractedDest}'** chưa có trong hệ thống, bạn vui lòng chọn lại nhé! ✨`;
+          : `Xin lỗi, hiện tại mình mới chỉ hỗ trợ dữ liệu cho 12 tỉnh/thành phố phổ biến: ${SUPPORTED_CITIES_CANON.join(', ')}.\n\nĐịa điểm **'${extractedDest}'** chưa có trong hệ thống, bạn vui lòng chọn lại nhé! ✨`;
 
         append('assistant', errorMsg);
         setStep('destination');
@@ -534,7 +552,7 @@ export default function AiItineraryScreen() {
       if (chatRes.sessionId) setSessionId(chatRes.sessionId);
       append('assistant', chatRes.reply);
     } catch (e) {
-      append('assistant', "Xin lỗi Hà, mình đang gặp chút trục trặc khi kết nối với AI.");
+      append('assistant', "Xin lỗi, mình đang gặp chút trục trặc khi kết nối với AI.");
     } finally {
       setLoading(false);
     }
@@ -593,7 +611,7 @@ export default function AiItineraryScreen() {
     if (!result) return [];
     const plans: DayPlan[] = [];
     for (const day of result.days) {
-      const acts: SuggestedActivity[] = day.activities.filter((a) => acceptedActivityIds.has(a.id));
+      const acts: SuggestedActivity[] = sortByStartTime(day.activities.filter((a) => acceptedActivityIds.has(a.id)));
       if (acts.length === 0) continue;
       plans.push({
         dayIndex: day.dayIndex,
@@ -612,20 +630,92 @@ export default function AiItineraryScreen() {
       });
     }
     return plans;
-  }, [result, acceptedActivityIds, displayActivity]);
+  }, [result, acceptedActivityIds, displayActivity, sortByStartTime]);
 
-  const applyToDraft = () => {
+  const formatDate = (d: Date): string => {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const applyToDraft = async () => {
     const plans = buildDayPlans();
     if (plans.length === 0) {
       Alert.alert('Chưa chọn hoạt động', 'Hãy bật ít nhất một hoạt động để áp dụng vào kế hoạch nháp.');
       return;
     }
+
     applyDayPlansToDraft(plans);
-    Alert.alert(
-      'Đã áp dụng kế hoạch nháp',
-      `Lịch trình ${plans.length} ngày đã được chuyển thành DayPlan (draft) trong kế hoạch của Hà. Bạn có thể kiểm tra ở tab Lịch trình.`,
-      [{ text: 'OK', onPress: () => router.back() }],
-    );
+
+    const userId = getSessionUserId();
+    if (!userId) {
+      Alert.alert('Cần đăng nhập', 'Bạn cần đăng nhập để lưu chuyến đi vào mục Cá nhân > Chuyến đi.', [
+        { text: 'Để sau', style: 'cancel' },
+        { text: 'Đăng nhập', onPress: () => router.replace('/login') },
+      ]);
+      return;
+    }
+
+    const parsedDays = parseInt(dayCountStr, 10);
+    const totalDays = Number.isNaN(parsedDays) || parsedDays < 1 ? plans.length : parsedDays;
+
+    const hasValidStartDate = /^\d{4}-\d{2}-\d{2}$/.test(startDate.trim()) &&
+      !Number.isNaN(Date.parse(`${startDate.trim()}T00:00:00`));
+    const start = hasValidStartDate ? new Date(`${startDate.trim()}T00:00:00`) : new Date();
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setDate(end.getDate() + Math.max(totalDays, 1) - 1);
+
+    const tripNameBase = destination.trim() ? `Lịch trình AI - ${destination.trim()}` : 'Lịch trình AI mới';
+
+    try {
+      setSavingTrip(true);
+      const thumbnailByActivityId = new Map<string, string>();
+      if (result) {
+        for (const day of result.days) {
+          for (const act of day.activities) {
+            if (act.thumbnail?.trim()) {
+              thumbnailByActivityId.set(act.id, act.thumbnail.trim());
+            }
+          }
+        }
+      }
+
+      await createTrip({
+        tripName: tripNameBase,
+        destination: destination.trim() || 'Việt Nam',
+        startDate: formatDate(start),
+        endDate: formatDate(end),
+        status: 'PLANNED',
+        activeDays: plans.map((day) => ({
+          // Backend createTrip assumes dayIndex is zero-based (0 -> day 1).
+          dayIndex: Math.max(0, day.dayIndex - 1),
+          places: day.activities.map((act) => ({
+            name: act.title,
+            description: act.description ?? '',
+            category: 'ai-suggestion',
+            latitude: 21.0285,
+            longitude: 105.8542,
+            suggestTime: act.suggestedStart?.trim() || '09:00',
+            imageUrl: thumbnailByActivityId.get(act.id),
+          })),
+        })),
+      }, userId);
+
+      Alert.alert(
+        'Đã lưu vào Chuyến đi',
+        'Lịch trình đã được lưu trong Cá nhân > Chuyến đi.',
+        [{ text: 'Xem ngay', onPress: () => router.replace('/(tabs)/profile') }],
+      );
+    } catch (e) {
+      Alert.alert(
+        'Đã lưu nháp cục bộ',
+        `${e instanceof Error ? e.message : 'Không thể lưu chuyến đi lên hệ thống.'}\n\nDữ liệu nháp vẫn được giữ trong phiên hiện tại.`,
+      );
+    } finally {
+      setSavingTrip(false);
+    }
   };
 
   const resetChat = () => {
@@ -833,13 +923,16 @@ export default function AiItineraryScreen() {
               </View>
             </Card>
 
-            {result.days.map((day) => (
+            {result.days.map((day) => {
+              const sortedActivities = sortByStartTime(day.activities);
+
+              return (
               <Card key={day.dayIndex} style={{ marginBottom: Spacing.md }}>
                 <View style={styles.dayHead}>
                   <View>
                     <Text style={[Typography.titleLG, { color: palette.text }]}>{day.label}</Text>
                     <Text style={[Typography.caption, { color: palette.textMuted }]}>
-                      {day.activities.length} hoạt động gợi ý
+                      {sortedActivities.length} hoạt động gợi ý
                     </Text>
                   </View>
                   <Pressable
@@ -852,7 +945,7 @@ export default function AiItineraryScreen() {
                   </Pressable>
                 </View>
 
-                {day.activities.map((act, actIdx) => {
+                {sortedActivities.map((act, actIdx) => {
                   const shown = displayActivity(act);
                   const isAccepted = acceptedActivityIds.has(act.id);
                   const isEdited = Boolean(activityEdits[act.id]);
@@ -960,9 +1053,10 @@ export default function AiItineraryScreen() {
                 })}
 
               </Card>
-            ))}
+              );
+            })}
 
-            <Button title="Áp dụng vào kế hoạch nháp (DayPlan)" onPress={applyToDraft} size="lg" />
+            <Button title={savingTrip ? 'Đang lưu chuyến đi...' : 'Áp dụng vào kế hoạch nháp (DayPlan)'} onPress={applyToDraft} size="lg" disabled={savingTrip} />
             <Button title="Chat mới (làm lại từ đầu)" onPress={resetChat} variant="secondary" style={{ marginTop: Spacing.sm }} />
           </View>
         ) : null}

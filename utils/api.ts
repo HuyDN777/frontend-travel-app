@@ -213,6 +213,7 @@ export type PlaceDraft = {
   latitude: number;
   longitude: number;
   suggestTime: string;
+  imageUrl?: string;
 };
 
 export type DailyPlan = {
