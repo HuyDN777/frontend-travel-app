@@ -101,9 +101,9 @@ export default function ExploreScreen() {
         <View style={styles.quickGrid}>
           {[
             { icon: 'airplane-outline', label: 'Chuyến bay', route: '/flights', active: true },
-            { icon: 'car-outline', label: 'Xe di chuyển', active: false },
-            { icon: 'restaurant-outline', label: 'Nhà hàng', active: false },
-            { icon: 'bed-outline', label: 'Khách sạn', active: false },
+            { icon: 'car-outline', label: 'Xe di chuyển', route: '/transport', active: true },
+            { icon: 'restaurant-outline', label: 'Nhà hàng', route: '/restaurants', active: true },
+            { icon: 'bed-outline', label: 'Khách sạn', route: '/hotels', active: true },
           ].map((item) => (
             <TouchableOpacity
               key={item.label}

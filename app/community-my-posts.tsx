@@ -1,14 +1,13 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import { Stack, useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, RefreshControl, ScrollView, Share, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { CommunityPostCard } from '@/components/ui/community-post-card';
-import { Input } from '@/components/ui/input';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
@@ -17,65 +16,49 @@ import {
   toggleLike,
   toggleSave,
   type CommunityPost,
-  resolveMediaUrl,
 } from '@/utils/api';
 import { moderateScale } from '@/utils/responsive';
-import { getSessionUser, getSessionUserId } from '@/utils/session';
+import { getSessionUserId } from '@/utils/session';
 
-export default function CommunityScreen() {
+export default function CommunityMyPostsScreen() {
   const scheme = useColorScheme() ?? 'light';
   const palette = Colors[scheme];
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const userId = getSessionUserId();
 
   const [posts, setPosts] = useState<CommunityPost[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  const currentUserId = getSessionUserId();
-  const me = getSessionUser();
-
-  const filteredPosts = posts
-    .filter((post) => post.userId !== currentUserId)
-    .filter((post) => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return true;
-    return [post.title, post.content, post.location, post.authorFullName, post.authorUsername]
-      .filter(Boolean)
-      .some((value) => String(value).toLowerCase().includes(q));
-    });
+  const myPosts = useMemo(
+    () => (userId ? posts.filter((p) => p.userId === userId) : []),
+    [posts, userId]
+  );
 
   const loadFeed = useCallback(async () => {
-    const userId = getSessionUserId();
     if (!userId) {
       router.replace('/login');
       return;
     }
-
     setLoading(true);
     try {
       const feed = await getCommunityFeed(userId);
       setPosts(feed);
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : 'Không tải được bảng tin cộng đồng';
+      const msg = error instanceof Error ? error.message : 'Không tải được bài viết';
       Alert.alert('Lỗi', msg);
     } finally {
       setLoading(false);
     }
-  }, [router]);
+  }, [router, userId]);
 
   useEffect(() => {
     void loadFeed();
   }, [loadFeed]);
 
   async function handleRefresh() {
-    const userId = getSessionUserId();
-    if (!userId) {
-      router.replace('/login');
-      return;
-    }
-
+    if (!userId) return;
     try {
       setRefreshing(true);
       const feed = await getCommunityFeed(userId);
@@ -89,12 +72,7 @@ export default function CommunityScreen() {
   }
 
   async function handleLike(postId: number) {
-    const userId = getSessionUserId();
-    if (!userId) {
-      router.replace('/login');
-      return;
-    }
-
+    if (!userId) return;
     try {
       await toggleLike(postId, userId);
       await loadFeed();
@@ -105,12 +83,7 @@ export default function CommunityScreen() {
   }
 
   async function handleSave(postId: number) {
-    const userId = getSessionUserId();
-    if (!userId) {
-      router.replace('/login');
-      return;
-    }
-
+    if (!userId) return;
     try {
       await toggleSave(postId, userId);
       await loadFeed();
@@ -123,7 +96,7 @@ export default function CommunityScreen() {
   async function handleShare(post: CommunityPost) {
     try {
       const message = [post.title, post.content, post.location].filter(Boolean).join('\n');
-      await Share.share({ message: message || 'Xem bai viet du lich nay nhe!' });
+      await Share.share({ message: message || 'Xem bài viết du lịch này nhé!' });
     } catch {
       Alert.alert('Lỗi', 'Không thể chia sẻ lúc này');
     }
@@ -140,12 +113,8 @@ export default function CommunityScreen() {
         text: 'Xóa',
         style: 'destructive',
         onPress: async () => {
+          if (!userId) return;
           try {
-            const userId = getSessionUserId();
-            if (!userId) {
-              router.replace('/login');
-              return;
-            }
             await deleteCommunityPost(postId, userId);
             await loadFeed();
           } catch (error: unknown) {
@@ -159,55 +128,32 @@ export default function CommunityScreen() {
 
   return (
     <ThemedView style={styles.root}>
-      <View style={[styles.header, { paddingTop: insets.top + Spacing.sm }]}>
-        <ThemedText type="title" style={styles.title}>
-          Cộng đồng
+      <Stack.Screen options={{ headerShown: false }} />
+      <View style={[styles.header, { paddingTop: insets.top + Spacing.sm, borderBottomColor: palette.border }]}>
+        <Pressable
+          onPress={() => router.back()}
+          style={[styles.backBtn, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+          <Ionicons name="chevron-back" size={22} color={palette.text} />
+        </Pressable>
+        <ThemedText type="defaultSemiBold" style={styles.headerTitle}>
+          Bài viết của tôi
         </ThemedText>
-
-        <View style={styles.headerActions}>
-          <Pressable
-            onPress={() => router.push('/community-post-editor')}
-            style={[styles.iconBtn, { backgroundColor: palette.primary }]}
-            accessibilityLabel="Viết bài">
-            <Ionicons name="add" size={moderateScale(18)} color="#0B1B18" />
-          </Pressable>
-          <Pressable
-            onPress={() => router.push('/ai-itinerary')}
-            style={[styles.iconBtnOutline, { borderColor: palette.border, backgroundColor: palette.surface }]}
-            accessibilityLabel="Trợ lý lịch AI">
-            <Ionicons name="sparkles-outline" size={moderateScale(18)} color={palette.text} />
-          </Pressable>
-          <Pressable
-            onPress={() => router.push('/community-my-posts')}
-            style={[styles.avatarBtn, { borderColor: palette.border }]}
-            accessibilityLabel="Bài viết của tôi">
-            <Image
-              source={{ uri: resolveMediaUrl(me?.avatarUrl) || 'https://i.pravatar.cc/100?img=12' }}
-              style={styles.avatar}
-              cachePolicy="none"
-              contentFit="cover"
-            />
-          </Pressable>
-        </View>
+        <View style={styles.headerSpacer} />
       </View>
 
       <ScrollView
         contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void handleRefresh()} />}
-      >
-        <Input
-          placeholder="Tìm bài viết, địa điểm, tác giả..."
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          autoCapitalize="none"
-        />
+        showsVerticalScrollIndicator={false}>
+        <ThemedText style={[styles.hint, { color: palette.textMuted }]}>
+          Chỉ hiển thị bài bạn đã đăng. Bảng tin chung nằm ở tab Cộng đồng.
+        </ThemedText>
 
-        {filteredPosts.map((post) => (
+        {myPosts.map((post) => (
           <CommunityPostCard
             key={post.id}
             post={post}
-            canEdit={post.userId === currentUserId}
+            canEdit
             onLike={() => void handleLike(post.id)}
             onSave={() => void handleSave(post.id)}
             onShare={() => void handleShare(post)}
@@ -216,8 +162,8 @@ export default function CommunityScreen() {
           />
         ))}
 
-        {!loading && filteredPosts.length === 0 ? (
-          <ThemedText style={[styles.emptyText, { color: palette.textMuted }]}>Chưa có bài viết nào.</ThemedText>
+        {!loading && myPosts.length === 0 ? (
+          <ThemedText style={[styles.empty, { color: palette.textMuted }]}>Bạn chưa có bài viết nào.</ThemedText>
         ) : null}
       </ScrollView>
     </ThemedView>
@@ -225,57 +171,30 @@ export default function CommunityScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-  },
+  root: { flex: 1 },
   header: {
-    paddingTop: Spacing.xl,
-    paddingHorizontal: Spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.md,
+    borderBottomWidth: 1,
   },
-  title: {
-    fontSize: moderateScale(26),
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  iconBtn: {
-    width: moderateScale(38),
-    height: moderateScale(38),
-    borderRadius: Radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconBtnOutline: {
-    width: moderateScale(38),
-    height: moderateScale(38),
-    borderRadius: Radius.pill,
+  backBtn: {
+    width: moderateScale(40),
+    height: moderateScale(40),
+    borderRadius: Radius.lg,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarBtn: {
-    width: moderateScale(38),
-    height: moderateScale(38),
-    borderRadius: Radius.pill,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  avatar: {
-    width: '100%',
-    height: '100%',
-  },
+  headerTitle: { fontSize: moderateScale(18) },
+  headerSpacer: { width: moderateScale(40) },
   content: {
     padding: Spacing.lg,
     gap: Spacing.md,
     paddingBottom: Spacing['2xl'],
   },
-  emptyText: {
-    textAlign: 'center',
-    marginTop: Spacing.xl,
-  },
+  hint: { fontSize: moderateScale(13), marginBottom: Spacing.sm },
+  empty: { textAlign: 'center', marginTop: Spacing.xl },
 });

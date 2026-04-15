@@ -2,6 +2,7 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AccessGate } from '@/components/auth/access-gate';
 import { ThemedText } from '@/components/themed-text';
@@ -12,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { SocialOAuthButton } from '@/components/ui/social-oauth-button';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { login, resetForgotPassword, sendForgotPasswordOTP, verifyForgotPasswordOTP } from '@/utils/api';
+import { login, resolveMediaUrl, resetForgotPassword, sendForgotPasswordOTP, verifyForgotPasswordOTP } from '@/utils/api';
 import { moderateScale } from '@/utils/responsive';
 import { setSessionUser } from '@/utils/session';
 
@@ -24,6 +25,7 @@ export default function LoginScreen() {
   const router = useRouter();
   const scheme = useColorScheme() ?? 'light';
   const palette = Colors[scheme];
+  const insets = useSafeAreaInsets();
 
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -84,7 +86,7 @@ export default function LoginScreen() {
         username: auth.username,
         email: auth.email,
         fullName: auth.fullName,
-        avatarUrl: auth.avatarUrl,
+        avatarUrl: resolveMediaUrl(auth.avatarUrl),
         role: auth.role,
       });
       if ((auth.role ?? '').toUpperCase() === 'ADMIN') {
@@ -93,7 +95,12 @@ export default function LoginScreen() {
         router.replace('/(tabs)');
       }
     } catch (error: any) {
-      Alert.alert('Đăng nhập thất bại', error?.message ?? 'Sai thông tin hoặc máy chủ không phản hồi.');
+      const message = String(error?.message ?? '').toLowerCase();
+      const friendlyMessage =
+        message.includes('internal server error') || message.includes('500')
+          ? 'Sai tên đăng nhập hoặc mật khẩu.'
+          : (error?.message ?? 'Sai thông tin hoặc máy chủ không phản hồi.');
+      Alert.alert('Đăng nhập thất bại', friendlyMessage);
     } finally {
       setLoading(false);
     }
@@ -189,16 +196,17 @@ export default function LoginScreen() {
   return (
     <AccessGate required="guest">
       <ThemedView style={styles.root}>
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.sm }]} showsVerticalScrollIndicator={false}>
           <Card padded={false} style={styles.heroCard}>
             <Image
-              source={{ uri: 'https://images.unsplash.com/photo-1480796927426-f609979314bd?auto=format&fit=crop&w=1200&q=80' }}
+              source={{ uri: 'https://images.unsplash.com/photo-1583417319070-4a69db38a482?auto=format&fit=crop&w=1200&q=80' }}
               style={styles.heroImage}
               contentFit="cover"
             />
+            <View style={styles.heroShade} />
             <View style={styles.heroOverlay}>
               <ThemedText type="title" style={styles.heroTitle}>Chào mừng trở lại</ThemedText>
-              <ThemedText style={{ color: palette.textMuted }}>
+              <ThemedText style={styles.heroSubtitle}>
                 Lưu giữ và lên lịch những chuyến đi của bạn.
               </ThemedText>
             </View>
@@ -344,6 +352,10 @@ const styles = StyleSheet.create({
     width: '100%',
     height: moderateScale(240),
   },
+  heroShade: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+  },
   heroOverlay: {
     position: 'absolute',
     left: Spacing.lg,
@@ -352,8 +364,12 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
   },
   heroTitle: {
+    color: '#FFFFFF',
     fontSize: moderateScale(38),
     lineHeight: moderateScale(40),
+  },
+  heroSubtitle: {
+    color: 'rgba(255,255,255,0.95)',
   },
   form: {
     gap: Spacing.md,

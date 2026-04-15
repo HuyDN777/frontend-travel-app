@@ -3,6 +3,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AccessGate } from '@/components/auth/access-gate';
 import { ThemedText } from '@/components/themed-text';
@@ -30,6 +31,7 @@ export default function CommunityPostEditorScreen() {
   const { postId } = useLocalSearchParams<{ postId?: string }>();
   const scheme = useColorScheme() ?? 'light';
   const palette = Colors[scheme];
+  const insets = useSafeAreaInsets();
 
   const isEdit = useMemo(() => !!postId, [postId]);
 
@@ -173,7 +175,7 @@ export default function CommunityPostEditorScreen() {
     <AccessGate required="user">
       <ThemedView style={styles.root}>
         <Stack.Screen options={{ headerShown: false }} />
-        <View style={[styles.header, { borderBottomColor: palette.border }]}>
+        <View style={[styles.header, { borderBottomColor: palette.border, paddingTop: insets.top + Spacing.sm }]}>
           <Button title="Hủy" variant="ghost" onPress={() => router.back()} />
           <ThemedText type="defaultSemiBold">{isEdit ? 'Chỉnh sửa bài' : 'Bài viết mới'}</ThemedText>
           <Button title="Đăng" onPress={handleSubmit} loading={loading} />

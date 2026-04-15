@@ -8,7 +8,7 @@ import { Colors, Spacing, Typography } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { getTripBookings } from '@/services/api/bookings';
 
-type PaymentState = 'PENDING' | 'PAID' | 'FAILED' | 'UNKNOWN';
+type PaymentState = 'PENDING' | 'PAID' | 'FAILED' | 'UNKNOWN' | 'NOT_APP';
 
 export default function PaymentStatusScreen() {
   const router = useRouter();
@@ -49,10 +49,15 @@ export default function PaymentStatusScreen() {
       const paymentStatus = (booking.paymentStatus || '').toUpperCase();
       if (paymentStatus === 'PAID') {
         setStatus('PAID');
-        setMessage('Thanh toán thành công. Vé sẽ được xác nhận trong ít phút.');
+        setMessage(
+          'Thanh toán thành công. Vào "Vé của tôi" để lấy mã (ETKT/HTL/RST/BUS) và QR đưa cho nhà hàng hoặc khách sạn đối soát.'
+        );
       } else if (paymentStatus === 'FAILED') {
         setStatus('FAILED');
         setMessage('Thanh toán thất bại. Bạn có thể thử lại với phương thức khác.');
+      } else if (paymentStatus === 'NOT_REQUIRED') {
+        setStatus('NOT_APP');
+        setMessage('Đơn này không thanh toán qua app. Xem mã trong "Vé của tôi".');
       } else {
         setStatus('PENDING');
         setMessage('Giao dịch đang xử lý. Vui lòng kiểm tra lại sau ít phút.');
@@ -73,22 +78,26 @@ export default function PaymentStatusScreen() {
     if (status === 'PAID') return palette.success;
     if (status === 'FAILED') return palette.danger;
     if (status === 'PENDING') return palette.warning;
+    if (status === 'NOT_APP') return palette.primary;
     return palette.textMuted;
   }, [palette, status]);
+
+  const statusLabel =
+    status === 'NOT_APP' ? 'Không thu qua app' : status;
 
   return (
     <View style={[styles.root, { backgroundColor: palette.background }]}>
       <View style={styles.content}>
         <Card style={styles.card}>
           <Text style={[Typography.bodySemi, { color: palette.text }]}>Mã booking: {bookingId || '--'}</Text>
-          <Text style={[Typography.bodySemi, { color: statusColor }]}>Trạng thái: {status}</Text>
+          <Text style={[Typography.bodySemi, { color: statusColor }]}>Trạng thái: {statusLabel}</Text>
           <Text style={[Typography.body, { color: palette.textMuted }]}>{message}</Text>
           <Button
             title={loading ? 'Đang kiểm tra...' : 'Kiểm tra lại trạng thái'}
             onPress={refreshStatus}
             loading={loading}
           />
-          <Button title="Xem vé của tôi" variant="ghost" onPress={() => router.push('/my-tickets')} />
+          <Button title="Xem vé của tôi" variant="secondary" onPress={() => router.push('/my-tickets')} />
         </Card>
       </View>
     </View>

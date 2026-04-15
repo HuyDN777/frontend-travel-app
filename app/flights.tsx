@@ -538,6 +538,9 @@ export default function FlightsScreen() {
         <View style={styles.resultsHead}>
           <Text style={[Typography.bodySemi, { color: palette.text }]}>Kết quả ({offers.length})</Text>
         </View>
+        <Text style={[Typography.caption, { color: palette.textMuted }]}>
+          Giá và chỗ phản ánh thời điểm bạn bấm tìm; offer có thể hết hạn hoặc đổi nếu để lâu.
+        </Text>
 
         {offers.length === 0 && !loading ? (
           <Card>

@@ -43,6 +43,18 @@ function resolveApiOrigin(): string {
 
 export const API_BASE_URL = resolveApiOrigin();
 
+export function resolveMediaUrl(rawUrl?: string | null): string {
+  const value = (rawUrl ?? '').trim();
+  if (!value) return '';
+  if (/^https?:\/\//i.test(value) || value.startsWith('data:')) {
+    return value;
+  }
+  if (value.startsWith('/')) {
+    return `${API_BASE_URL}${value}`;
+  }
+  return `${API_BASE_URL}/${value}`;
+}
+
 type RequestOptions = RequestInit & {
   userId?: number | null;
 };

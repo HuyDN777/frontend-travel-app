@@ -37,19 +37,19 @@ export function CommunityPostCard({ post, canEdit, onLike, onSave, onShare, onEd
     return post.imageUrl ? [post.imageUrl] : [];
   }, [post.imageUrl, post.imageUrls]);
 
-  const authorName = post.authorFullName || post.authorUsername || `User ${post.userId}`;
+  const authorName = post.authorFullName || post.authorUsername || `Người dùng ${post.userId}`;
 
   const postedTime = useMemo(() => {
     const date = new Date(post.createdAt);
     if (Number.isNaN(date.getTime())) return '';
     const diffMs = Date.now() - date.getTime();
     const diffMins = Math.floor(diffMs / 60000);
-    if (diffMins < 1) return 'Vua xong';
-    if (diffMins < 60) return `${diffMins} phut truoc`;
+    if (diffMins < 1) return 'Vừa xong';
+    if (diffMins < 60) return `${diffMins} phút trước`;
     const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `${diffHours} gio truoc`;
+    if (diffHours < 24) return `${diffHours} giờ trước`;
     const diffDays = Math.floor(diffHours / 24);
-    return `${diffDays} ngay truoc`;
+    return `${diffDays} ngày trước`;
   }, [post.createdAt]);
 
   const previewImage = previewIndex !== null ? images[previewIndex] : null;
@@ -72,7 +72,7 @@ export function CommunityPostCard({ post, canEdit, onLike, onSave, onShare, onEd
 
     const permission = await MediaLibrary.requestPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Permission', 'Can cap quyen thu vien de luu anh');
+      Alert.alert('Quyền truy cập', 'Cần quyền thư viện ảnh để lưu ảnh về máy.');
       return;
     }
 
@@ -81,9 +81,9 @@ export function CommunityPostCard({ post, canEdit, onLike, onSave, onShare, onEd
       const target = `${FileSystem.cacheDirectory ?? ''}${fileName}`;
       const downloaded = await FileSystem.downloadAsync(previewImage, target);
       await MediaLibrary.createAssetAsync(downloaded.uri);
-      Alert.alert('Success', 'Da luu anh vao thu vien');
+      Alert.alert('Đã lưu', 'Ảnh đã được lưu vào thư viện.');
     } catch (error: any) {
-      Alert.alert('Error', error?.message ?? 'Khong the luu anh');
+      Alert.alert('Lỗi', error?.message ?? 'Không thể lưu ảnh');
     }
   }
 

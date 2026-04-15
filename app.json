@@ -28,6 +28,13 @@
     "plugins": [
       "expo-router",
       [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Ứng dụng cần vị trí để tìm nhà hàng và khách sạn quanh bạn trên bản đồ OpenStreetMap.",
+          "locationAlwaysAndWhenInUsePermission": "Ứng dụng cần vị trí để tìm địa điểm lân cận."
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",

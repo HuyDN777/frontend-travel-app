@@ -259,6 +259,9 @@ export default function FlightCheckoutScreen() {
           </Text>
           <Text style={[Typography.caption, { color: palette.textMuted }]}>Hãng: {params.airlineName}</Text>
           <Text style={[Typography.bodySemi, { color: palette.text }]}>Giá vé: {formatMoneyVnd(baseAmount)}</Text>
+          <Text style={[Typography.caption, { color: palette.textMuted, marginTop: Spacing.sm }]}>
+            Thanh toán tạo booking trong app và cổng VNPAY/Momo; luồng hiện tại chưa gọi lại hệ thống vé để giữ chỗ/xuất vé thật với hãng.
+          </Text>
         </Card>
 
         <Card style={styles.section}>
