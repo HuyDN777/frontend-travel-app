@@ -30,7 +30,7 @@ export default function RootLayout() {
         <Stack.Screen name="flights" options={{ title: 'Chuyến bay', presentation: 'card' }} />
         <Stack.Screen name="hotels" options={{ title: 'Khách sạn', presentation: 'card' }} />
         <Stack.Screen name="restaurants" options={{ title: 'Nhà hàng', presentation: 'card' }} />
-        <Stack.Screen name="transport" options={{ title: 'Xe / tàu / bus', presentation: 'card' }} />
+        <Stack.Screen name="transport" options={{ title: 'Xe', presentation: 'card' }} />
         <Stack.Screen name="transport-web" options={{ presentation: 'card' }} />
         <Stack.Screen name="destination-detail" options={{ headerShown: false, presentation: 'card' }} />
         <Stack.Screen name="place-detail" options={{ headerShown: false, presentation: 'card' }} />
