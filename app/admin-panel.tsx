@@ -40,7 +40,7 @@ export default function AdminPanelScreen() {
       setUsers(data.users);
       setPosts(data.posts);
     } catch (error: any) {
-      Alert.alert('Error', error?.message ?? 'Khong tai duoc admin panel');
+      Alert.alert('Lỗi', error?.message ?? 'Không tải được bảng điều khiển');
     } finally {
       setLoading(false);
     }
@@ -48,7 +48,7 @@ export default function AdminPanelScreen() {
 
   useEffect(() => {
     if ((getSessionUser()?.role ?? '').toUpperCase() !== 'ADMIN') {
-      Alert.alert('Permission', 'Ban khong co quyen truy cap admin panel');
+      Alert.alert('Quyền hạn', 'Bạn không có quyền truy cập trang quản trị');
       return;
     }
     void loadDashboard();
@@ -63,7 +63,7 @@ export default function AdminPanelScreen() {
       await updateAdminUserRole(user.id, nextRole, userId);
       await loadDashboard();
     } catch (error: any) {
-      Alert.alert('Error', error?.message ?? 'Khong cap nhat role duoc');
+      Alert.alert('Lỗi', error?.message ?? 'Không cập nhật được vai trò');
     }
   }
 
@@ -75,7 +75,7 @@ export default function AdminPanelScreen() {
       await deleteCommunityPost(postId, userId);
       await loadDashboard();
     } catch (error: any) {
-      Alert.alert('Error', error?.message ?? 'Khong the xoa bai viet');
+      Alert.alert('Lỗi', error?.message ?? 'Không thể xóa bài viết');
     }
   }
 
@@ -89,29 +89,29 @@ export default function AdminPanelScreen() {
             Admin Panel
           </ThemedText>
           <View style={[styles.activePill, { backgroundColor: '#213628' }]}>
-            <ThemedText style={styles.activePillText}>ADMIN STATUS: ACTIVE</ThemedText>
+            <ThemedText style={styles.activePillText}>TRẠNG THÁI: HOẠT ĐỘNG</ThemedText>
           </View>
         </View>
 
         <View style={styles.metricsRow}>
           <Card style={styles.metricCard}>
             <ThemedText style={[styles.metricValue, { color: palette.text }]}>{users.length}</ThemedText>
-            <ThemedText style={{ color: palette.textMuted }}>Total Users</ThemedText>
+            <ThemedText style={{ color: palette.textMuted }}>Tổng Người Dùng</ThemedText>
           </Card>
           <Card style={styles.metricCard}>
             <ThemedText style={[styles.metricValue, { color: palette.text }]}>{activeUsers}</ThemedText>
-            <ThemedText style={{ color: palette.textMuted }}>Daily Active</ThemedText>
+            <ThemedText style={{ color: palette.textMuted }}>Hoạt động hôm nay</ThemedText>
           </Card>
         </View>
 
         <Card style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
             <Ionicons name="people-outline" size={16} color={palette.text} />
-            <ThemedText type="defaultSemiBold">Manage Users</ThemedText>
+            <ThemedText type="defaultSemiBold">Quản lý Người Dùng</ThemedText>
           </View>
 
           {users.slice(0, 8).map((user) => (
-            <View key={user.id} style={[styles.itemRow, { borderBottomColor: palette.border }] }>
+            <View key={user.id} style={[styles.itemRow, { borderBottomColor: palette.border }]}>
               <View style={styles.itemTextWrap}>
                 <ThemedText>{user.fullName || user.username}</ThemedText>
                 <ThemedText style={{ color: palette.textMuted }}>{user.email}</ThemedText>
@@ -120,7 +120,7 @@ export default function AdminPanelScreen() {
                 onPress={() => void handleToggleRole(user)}
                 style={[styles.roleBtn, { backgroundColor: user.role === 'ADMIN' ? '#F1B3B9' : '#BFE5DF' }]}
               >
-                <ThemedText style={styles.roleBtnText}>{user.role === 'ADMIN' ? 'Set USER' : 'Set ADMIN'}</ThemedText>
+                <ThemedText style={styles.roleBtnText}>{user.role === 'ADMIN' ? 'Chuyển USER' : 'Chuyển ADMIN'}</ThemedText>
               </Pressable>
             </View>
           ))}
@@ -129,23 +129,23 @@ export default function AdminPanelScreen() {
         <Card style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
             <Ionicons name="shield-checkmark-outline" size={16} color={palette.text} />
-            <ThemedText type="defaultSemiBold">Moderate Community Posts</ThemedText>
+            <ThemedText type="defaultSemiBold">Kiểm duyệt Bài cộng đồng</ThemedText>
           </View>
 
           {posts.slice(0, 8).map((post) => (
-            <View key={post.id} style={[styles.itemRow, { borderBottomColor: palette.border }] }>
+            <View key={post.id} style={[styles.itemRow, { borderBottomColor: palette.border }]}>
               <View style={styles.itemTextWrap}>
                 <ThemedText numberOfLines={1}>{post.title}</ThemedText>
                 <ThemedText style={{ color: palette.textMuted }} numberOfLines={1}>
-                  by {post.authorFullName || post.authorUsername || `User ${post.userId}`}
+                  bởi {post.authorFullName || post.authorUsername || `Người dùng ${post.userId}`}
                 </ThemedText>
               </View>
-              <Button title="Delete" variant="ghost" onPress={() => void handleDeletePost(post.id)} />
+              <Button title="Xóa" variant="ghost" onPress={() => void handleDeletePost(post.id)} />
             </View>
           ))}
         </Card>
 
-        <Button title="Reload Dashboard" onPress={() => void loadDashboard()} loading={loading} />
+        <Button title="Tải lại bảng điều khiển" onPress={() => void loadDashboard()} loading={loading} />
       </ScrollView>
     </ThemedView>
   );

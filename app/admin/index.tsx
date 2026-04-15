@@ -61,7 +61,7 @@ export default function AdminDashboardScreen() {
 
   return (
     <AdminShell
-      title="Admin Panel"
+      title="Bảng Quản Trị"
       subtitle="Khu vực quản trị riêng cho vận hành, kiểm soát người dùng và hệ thống."
       rightAction={
         <Pressable
@@ -82,14 +82,14 @@ export default function AdminDashboardScreen() {
             <Ionicons name="people-outline" size={18} color={palette.text} />
           </View>
           <Text style={styles.metricValueSmall}>{metrics.totalUsers.toLocaleString('vi-VN')}</Text>
-          <Text style={styles.metricLabelSmall}>User</Text>
+          <Text style={styles.metricLabelSmall}>Người dùng</Text>
         </Card>
         <Card style={styles.statCardSmall}>
           <View style={styles.metricIconSmall}>
             <Ionicons name="bar-chart-outline" size={18} color={palette.text} />
           </View>
           <Text style={styles.metricValueSmall}>{metrics.activeUsers.toLocaleString('vi-VN')}</Text>
-          <Text style={styles.metricLabelSmall}>Daily</Text>
+          <Text style={styles.metricLabelSmall}>Hoạt động</Text>
         </Card>
       </View>
 
@@ -130,29 +130,29 @@ export default function AdminDashboardScreen() {
       </Card>
 
       <View style={styles.sectionHead}>
-        <Text style={[styles.sectionLabel, { color: '#9E9A8F' }]}>MANAGEMENT</Text>
+        <Text style={[styles.sectionLabel, { color: '#9E9A8F' }]}>QUẢN LÝ HỆ THỐNG</Text>
         {loading ? <Text style={[Typography.caption, { color: palette.textMuted }]}>Đang tải...</Text> : null}
       </View>
 
       <MenuCard
         icon="people-outline"
-        title="Manage Users"
-        subtitle="View and edit user accounts"
+        title="Quản lý Người Dùng"
+        subtitle="Xem và chỉnh sửa tài khoản người dùng"
         badge={`${metrics.adminUsers} admin`}
         onPress={() => router.push('/admin/users')}
       />
       <MenuCard
         icon="shield-checkmark-outline"
-        title="Moderate Community Posts"
-        subtitle="Review content and moderate feed"
-        badge={`${moderationQueue.length} queued`}
+        title="Kiểm duyệt Bài cộng đồng"
+        subtitle="Xemét nội dung và kiểm duyệt bảng tin"
+        badge={`${moderationQueue.length} chờ duyệt`}
         badgeTone="danger"
         onPress={() => router.push('/admin/moderation')}
       />
       <MenuCard
         icon="settings-outline"
-        title="App Settings"
-        subtitle="General configuration and security preferences"
+        title="Cài đặt Ứng dụng"
+        subtitle="Cấu hình chung và cài đặt bảo mật"
         onPress={() => router.push('/admin/settings')}
       />
 
@@ -160,50 +160,50 @@ export default function AdminDashboardScreen() {
         onPress={() => router.push('/admin/logs')}
         style={[styles.logsButton, { borderColor: '#D8CFBF', backgroundColor: palette.background }]}>
         <Ionicons name="information-circle-outline" size={18} color={palette.textMuted} />
-        <Text style={[Typography.bodySemi, { color: '#B0A897' }]}>View System Logs</Text>
+        <Text style={[Typography.bodySemi, { color: '#B0A897' }]}>Xem Nhật ký Hệ thống</Text>
       </Pressable>
     </AdminShell>
   );
 }
 
 const styles = StyleSheet.create({
-    statCardSmall: {
-      flex: 1,
-      minWidth: 0,
-      height: 90,
-      borderRadius: 18,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginRight: Spacing.md,
-      backgroundColor: '#F8F6F2',
-      borderWidth: 1,
-      borderColor: '#E8E3D8',
-      ...Elevation.card,
-      padding: 0,
-      gap: 2,
-    },
-    metricIconSmall: {
-      width: 32,
-      height: 32,
-      borderRadius: 16,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: '#F4E9D6',
-      marginBottom: 2,
-    },
-    metricValueSmall: {
-      fontSize: 22,
-      fontWeight: '700',
-      color: '#222',
-      marginBottom: 0,
-      marginTop: 2,
-    },
-    metricLabelSmall: {
-      fontSize: 13,
-      color: '#A6A29A',
-      fontWeight: '500',
-      marginTop: 2,
-    },
+  statCardSmall: {
+    flex: 1,
+    minWidth: 0,
+    height: 90,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: Spacing.md,
+    backgroundColor: '#F8F6F2',
+    borderWidth: 1,
+    borderColor: '#E8E3D8',
+    ...Elevation.card,
+    padding: 0,
+    gap: 2,
+  },
+  metricIconSmall: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F4E9D6',
+    marginBottom: 2,
+  },
+  metricValueSmall: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#222',
+    marginBottom: 0,
+    marginTop: 2,
+  },
+  metricLabelSmall: {
+    fontSize: 13,
+    color: '#A6A29A',
+    fontWeight: '500',
+    marginTop: 2,
+  },
   refreshBtn: {
     width: 42,
     height: 42,

@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
     Modal,
@@ -18,10 +18,8 @@ import { Chip } from '@/components/ui/chip';
 import { Input } from '@/components/ui/input';
 import { Colors, Elevation, Radius, Spacing, Typography } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { createTrip } from '@/utils/api';
+import { getMyTrips } from '@/utils/api';
 import { getSessionUserId } from '@/utils/session';
-
-const recentSearches = ['Kyoto, Japan', 'Seoul, South Korea', 'Taipei, Taiwan'];
 
 function formatDate(date: Date | null): string {
 
@@ -33,11 +31,32 @@ export default function CreateTripScreen() {
     const scheme = useColorScheme() ?? 'light';
     const palette = Colors[scheme];
     const router = useRouter();
+    const { tripName } = useLocalSearchParams<{ tripName: string }>();
 
     const [destination, setDestination] = useState('');
     const [startDate, setStartDate] = useState<Date | null>(null);
     const [endDate, setEndDate] = useState<Date | null>(null);
     const [loading, setLoading] = useState(false);
+    const [recentSearches, setRecentSearches] = useState<string[]>([]);
+
+    React.useEffect(() => {
+        let active = true;
+        (async () => {
+            const userId = getSessionUserId();
+            if (!userId) return;
+            try {
+                const trips = await getMyTrips(userId);
+                if (active && trips) {
+                    const dests = trips.map(t => t.destination).filter(Boolean);
+                    const uniqueDests = Array.from(new Set(dests)).slice(0, 3);
+                    setRecentSearches(uniqueDests);
+                }
+            } catch (error) {
+                console.error(error);
+            }
+        })();
+        return () => { active = false; };
+    }, []);
 
     // Which picker is open: 'start' | 'end' | null
     const [pickerTarget, setPickerTarget] = useState<'start' | 'end' | null>(null);
@@ -83,7 +102,7 @@ export default function CreateTripScreen() {
         setDestination(label);
     }
 
-    async function handleCreateTrip() {
+    function handleCreateTrip() {
         const userId = getSessionUserId();
         if (!userId) {
             router.replace('/login');
@@ -91,28 +110,20 @@ export default function CreateTripScreen() {
         }
 
         if (!destination || !startDate || !endDate) {
-            alert('Please fill in all fields');
+            alert('Vui lòng điền đầy đủ thông tin');
             return;
         }
 
-        setLoading(true);
-        try {
-            await createTrip({
-                tripName: destination,
-                destination: destination,
+        // Không gọi API ở đây — chuyển sang màn ngân sách trước
+        router.push({
+            pathname: '/(tabs)/budget',
+            params: {
+                tripName: tripName || 'Chuyến đi mới',
+                destination,
                 startDate: startDate.toISOString().split('T')[0],
                 endDate: endDate.toISOString().split('T')[0],
-                status: 'PLANNED',
-            }, userId);
-
-            // Navigate to itinerary upon success
-            router.push('/(tabs)/itinerary');
-        } catch (error) {
-            console.error('Error creating trip:', error);
-            alert('Failed to connect to backend server. Make sure it is running on port 8080.');
-        } finally {
-            setLoading(false);
-        }
+            },
+        });
     }
 
     const minEndDate = startDate ?? new Date();
@@ -124,18 +135,18 @@ export default function CreateTripScreen() {
                 <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
                     <Ionicons name="arrow-back" size={22} color={palette.text} />
                 </TouchableOpacity>
-                <Text style={[Typography.titleLG, { color: palette.text }]}>New Trip</Text>
+                <Text style={[Typography.titleLG, { color: palette.text }]}>Chuyến đi mới</Text>
                 <View style={{ width: 36 }} />
             </View>
 
             <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
                 {/* Where to? */}
                 <View style={styles.group}>
-                    <Text style={[styles.label, { color: palette.text }]}>Where to?</Text>
+                    <Text style={[styles.label, { color: palette.text }]}>Bạn muốn đi đâu?</Text>
                     <Input
                         value={destination}
                         onChangeText={setDestination}
-                        placeholder="Search destinations"
+                        placeholder="Tìm kiếm điểm đến"
                         leading={
                             <Ionicons
                                 name="search-outline"
@@ -149,7 +160,7 @@ export default function CreateTripScreen() {
 
                 {/* When? */}
                 <View style={styles.group}>
-                    <Text style={[styles.label, { color: palette.text }]}>When?</Text>
+                    <Text style={[styles.label, { color: palette.text }]}>Khi nào?</Text>
                     <View style={styles.dateRow}>
                         {/* Start Date */}
                         <Pressable
@@ -174,7 +185,7 @@ export default function CreateTripScreen() {
                                 ]}
                                 numberOfLines={1}
                             >
-                                {startDate ? formatDate(startDate) : 'Start Date'}
+                                {startDate ? formatDate(startDate) : 'Ngày bắt đầu'}
                             </Text>
                         </Pressable>
 
@@ -203,7 +214,7 @@ export default function CreateTripScreen() {
                                 ]}
                                 numberOfLines={1}
                             >
-                                {endDate ? formatDate(endDate) : 'End Date'}
+                                {endDate ? formatDate(endDate) : 'Ngày kết thúc'}
                             </Text>
                         </Pressable>
                     </View>
@@ -213,32 +224,36 @@ export default function CreateTripScreen() {
                         <View style={styles.durationRow}>
                             <Ionicons name="time-outline" size={14} color={palette.primary} />
                             <Text style={[Typography.caption, { color: palette.primary }]}>
-                                {Math.round((endDate.getTime() - startDate.getTime()) / 86400000) + 1} days
+                                {Math.round((endDate.getTime() - startDate.getTime()) / 86400000) + 1} ngày
                             </Text>
                         </View>
                     )}
                 </View>
 
                 {/* Recent Searches */}
-                <View style={styles.group}>
-                    <Text style={[styles.sectionLabel, { color: palette.textMuted }]}>RECENT SEARCHES</Text>
-                    <View style={styles.chipRow}>
-                        {recentSearches.map((item) => (
-                            <Chip
-                                key={item}
-                                label={item}
-                                selected={destination === item}
-                                onPress={() => handleRecentSearch(item)}
-                            />
-                        ))}
+                {recentSearches.length > 0 && (
+                    <View style={styles.group}>
+                        <Text style={[styles.sectionLabel, { color: palette.textMuted }]}>
+                            TÌM KIẾM GẦN ĐÂY
+                        </Text>
+                        <View style={styles.chipRow}>
+                            {recentSearches.map((item) => (
+                                <Chip
+                                    key={item}
+                                    label={item}
+                                    selected={destination === item}
+                                    onPress={() => handleRecentSearch(item)}
+                                />
+                            ))}
+                        </View>
                     </View>
-                </View>
+                )}
             </ScrollView>
 
             {/* CTA */}
             <View style={[styles.footer, { borderTopColor: palette.border }]}>
                 <Button
-                    title="Create Trip →"
+                    title="Tạo chuyến đi →"
                     size="lg"
                     style={styles.ctaBtn}
                     onPress={handleCreateTrip}
@@ -270,13 +285,13 @@ export default function CreateTripScreen() {
                         <View style={[styles.modalHandle, { backgroundColor: palette.border }]} />
                         <View style={styles.modalHeader}>
                             <Pressable onPress={() => setPickerTarget(null)}>
-                                <Text style={[Typography.bodySemi, { color: palette.textMuted }]}>Cancel</Text>
+                                <Text style={[Typography.bodySemi, { color: palette.textMuted }]}>Hủy</Text>
                             </Pressable>
                             <Text style={[Typography.bodySemi, { color: palette.text }]}>
-                                {pickerTarget === 'start' ? 'Start Date' : 'End Date'}
+                                {pickerTarget === 'start' ? 'Ngày bắt đầu' : 'Ngày kết thúc'}
                             </Text>
                             <Pressable onPress={confirmIOS}>
-                                <Text style={[Typography.bodySemi, { color: palette.primary }]}>Done</Text>
+                                <Text style={[Typography.bodySemi, { color: palette.primary }]}>Xong</Text>
                             </Pressable>
                         </View>
                         <DateTimePicker

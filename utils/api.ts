@@ -161,6 +161,21 @@ export type TripItem = {
   destination: string;
   startDate: string;
   endDate: string;
+  userId?: number;
+};
+
+export type PlaceDraft = {
+  name: string;
+  description: string;
+  category: string;
+  latitude: number;
+  longitude: number;
+  suggestTime: string;
+};
+
+export type DailyPlan = {
+  dayIndex: number;
+  places: PlaceDraft[];
 };
 
 export type CreateTripPayload = {
@@ -169,6 +184,7 @@ export type CreateTripPayload = {
   startDate: string;
   endDate: string;
   status?: string;
+  activeDays?: DailyPlan[];
 };
 
 export type CommunityPost = {
@@ -326,10 +342,83 @@ export async function createTrip(payload: CreateTripPayload, userId?: number) {
     throw new Error('Not logged in');
   }
 
-  return request(`/api/v1/create-trip/${resolvedUserId}`, {
+  return request<number>(`/api/v1/create-trip/${resolvedUserId}`, {
     userId: resolvedUserId,
     method: 'POST',
     body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteTrip(tripId: number, userId?: number) {
+  const resolvedUserId = resolveUserId(userId);
+  if (typeof resolvedUserId !== 'number') {
+    throw new Error('Not logged in');
+  }
+
+  return request<void>(`/api/v1/trips/${tripId}`, {
+    userId: resolvedUserId,
+    method: 'DELETE',
+  });
+}
+
+export type InviteCompanionRes = {
+  memberId: number;
+  tripId: number;
+  tripName: string;
+  userId: number;
+  inviteeName: string;
+  inviteeEmail: string;
+  memberRole: number;
+  status: number;
+};
+
+export async function inviteCompanion(
+  tripId: number,
+  payload: { inviteeEmail: string; memberRole?: number },
+  userId?: number
+) {
+  const resolvedUserId = resolveUserId(userId);
+  if (typeof resolvedUserId !== 'number') throw new Error('Not logged in');
+  return request<InviteCompanionRes>(`/api/v1/trips/${tripId}/invite`, {
+    userId: resolvedUserId,
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getTripMembers(tripId: number, userId?: number) {
+  const resolvedUserId = resolveUserId(userId);
+  if (typeof resolvedUserId !== 'number') throw new Error('Not logged in');
+  return request<InviteCompanionRes[]>(`/api/v1/trips/${tripId}/members`, {
+    userId: resolvedUserId,
+    method: 'GET',
+  });
+}
+
+export async function getPendingInvitations(userId?: number) {
+  const resolvedUserId = resolveUserId(userId);
+  if (typeof resolvedUserId !== 'number') throw new Error('Not logged in');
+  return request<InviteCompanionRes[]>('/api/v1/trips/invitations/pending', {
+    userId: resolvedUserId,
+    method: 'GET',
+  });
+}
+
+export async function acceptInvitation(memberId: number, userId?: number) {
+  const resolvedUserId = resolveUserId(userId);
+  if (typeof resolvedUserId !== 'number') throw new Error('Not logged in');
+  return request<InviteCompanionRes>(`/api/v1/trips/members/${memberId}/accept`, {
+    userId: resolvedUserId,
+    method: 'PUT',
+  });
+}
+
+export async function declineInvitation(memberId: number, userId?: number) {
+  const resolvedUserId = resolveUserId(userId);
+  if (typeof resolvedUserId !== 'number') throw new Error('Not logged in');
+  return request<void>(`/api/v1/trips/members/${memberId}/decline`, {
+    userId: resolvedUserId,
+    method: 'DELETE',
   });
 }
 
@@ -479,5 +568,19 @@ export async function updateAdminUserRole(targetUserId: number, role: 'USER' | '
     userId: resolvedUserId,
     method: 'PATCH',
     body: JSON.stringify({ role }),
+  });
+}
+
+export async function getTripJournal(tripId: number, userId?: number): Promise<any> {
+  return request<any>(`/api/v1/trips/${tripId}/trip-journal`, {
+    userId,
+    method: 'GET',
+  });
+}
+
+export async function checkInLocationApi(postItineraryDetailId: number, userId?: number): Promise<void> {
+  return request<void>(`/api/v1/itinerary-details/${postItineraryDetailId}/check-in`, {
+    userId,
+    method: 'POST',
   });
 }

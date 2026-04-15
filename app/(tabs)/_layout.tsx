@@ -48,6 +48,13 @@ export default function TabLayout() {
           title: 'Lịch trình',
           tabBarIcon: ({ color, size }) => <Ionicons name="calendar-outline" size={size ?? 24} color={color} />,
         }}
+        listeners={{
+          tabPress: (e) => {
+            e.preventDefault();
+            // Optional: Alert the user or silently ignore
+            // alert('Vui lòng chọn "Xem chi tiết" của một chuyến đi trong mục Cá nhân để xem Lịch trình.');
+          },
+        }}
       />
       <Tabs.Screen
         name="budget"
