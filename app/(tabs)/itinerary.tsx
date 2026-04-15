@@ -237,7 +237,7 @@ export default function ItineraryScreen() {
                     title="Tạo chuyến đi →"
                     size="lg"
                     style={{ marginTop: Spacing.xl, borderRadius: Radius.pill }}
-                    onPress={() => router.push('/(tabs)/create-trip')}
+                    onPress={() => router.push('/name-trip')}
                 />
             </View>
         );

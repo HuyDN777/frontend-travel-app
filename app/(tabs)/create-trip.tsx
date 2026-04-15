@@ -31,9 +31,9 @@ export default function CreateTripScreen() {
     const scheme = useColorScheme() ?? 'light';
     const palette = Colors[scheme];
     const router = useRouter();
-    const { tripName } = useLocalSearchParams<{ tripName: string }>();
+    const { tripName, destination: destinationParam } = useLocalSearchParams<{ tripName: string; destination?: string }>();
 
-    const [destination, setDestination] = useState('');
+    const [destination, setDestination] = useState(destinationParam ?? '');
     const [startDate, setStartDate] = useState<Date | null>(null);
     const [endDate, setEndDate] = useState<Date | null>(null);
     const [loading, setLoading] = useState(false);

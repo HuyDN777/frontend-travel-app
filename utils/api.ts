@@ -93,7 +93,37 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
         'Ảnh hoặc dữ liệu gửi lên quá lớn (413). Hãy chọn ảnh nhỏ hơn, hoặc bảo backend tăng spring.servlet.multipart.max-file-size và restart.'
       );
     }
-    const message = await response.text();
+    const raw = await response.text();
+    let message = raw?.trim() || '';
+
+    if (message) {
+      try {
+        const parsed = JSON.parse(message);
+        if (typeof parsed === 'string') {
+          message = parsed;
+        } else if (parsed && typeof parsed === 'object') {
+          const payload = parsed as Record<string, unknown>;
+          const extracted =
+            (typeof payload.message === 'string' && payload.message) ||
+            (typeof payload.error === 'string' && payload.error) ||
+            (typeof payload.details === 'string' && payload.details);
+          message = extracted ? extracted : `Yêu cầu thất bại (${response.status}).`;
+        }
+      } catch {
+        // Keep plain text message
+      }
+    }
+
+    const normalized = message.replace(/\s+/g, ' ').trim().toLowerCase();
+    if (response.status === 401 || response.status === 403) {
+      throw new Error('Sai tên đăng nhập hoặc mật khẩu.');
+    }
+    if (response.status === 404 && normalized.includes('user')) {
+      throw new Error('Tài khoản chưa tồn tại. Vui lòng đăng ký trước.');
+    }
+    if (!message || message.startsWith('{') || message.startsWith('[')) {
+      throw new Error(`Yêu cầu thất bại (${response.status}). Vui lòng thử lại.`);
+    }
     throw new Error(message || `Request failed: ${response.status}`);
   }
 

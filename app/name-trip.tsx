@@ -1,4 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useLocalSearchParams } from 'expo-router';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -19,6 +20,7 @@ export default function NameTripScreen() {
     const scheme = useColorScheme() ?? 'light';
     const palette = Colors[scheme];
     const router = useRouter();
+    const { destination } = useLocalSearchParams<{ destination?: string }>();
 
     const [tripName, setTripName] = useState('');
 
@@ -31,7 +33,7 @@ export default function NameTripScreen() {
 
         router.push({
             pathname: '/(tabs)/create-trip',
-            params: { tripName: trimmed },
+            params: { tripName: trimmed, destination },
         });
     }
 

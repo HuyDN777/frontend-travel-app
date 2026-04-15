@@ -142,6 +142,8 @@ export type ExpenseRow = {
   description?: string | null;
   tripId: number;
   userId: number;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 };
 
 export type TripBalanceRes = {
@@ -164,6 +166,12 @@ export type BudgetUpsertReq = {
 
 export type ExpenseCreateReq = {
   userId: number;
+  amount: number;
+  category: string;
+  description?: string;
+};
+
+export type ExpenseUpdateReq = {
   amount: number;
   category: string;
   description?: string;

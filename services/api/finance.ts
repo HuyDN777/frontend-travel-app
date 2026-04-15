@@ -4,6 +4,7 @@ import type {
   BudgetUpsertReq,
   CategoryAnalyticsRes,
   ExpenseCreateReq,
+  ExpenseUpdateReq,
   ExpenseRow,
   TripBalanceRes,
 } from '@/types/api';
@@ -26,8 +27,25 @@ export function createTripExpense(tripId: number, body: ExpenseCreateReq) {
   });
 }
 
-export function getTripExpenses(tripId: number) {
-  return apiRequest<ExpenseRow[]>(`/trips/${tripId}/expenses`, { method: 'GET' });
+export function getTripExpenses(tripId: number, filters?: { fromDate?: string; toDate?: string }) {
+  return apiRequest<ExpenseRow[]>(`/trips/${tripId}/expenses`, {
+    method: 'GET',
+    query: {
+      fromDate: filters?.fromDate,
+      toDate: filters?.toDate,
+    },
+  });
+}
+
+export function updateTripExpense(tripId: number, expenseId: number, body: ExpenseUpdateReq) {
+  return apiRequest<ExpenseRow>(`/trips/${tripId}/expenses/${expenseId}`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+}
+
+export function deleteTripExpense(tripId: number, expenseId: number) {
+  return apiRequest<string>(`/trips/${tripId}/expenses/${expenseId}`, { method: 'DELETE' });
 }
 
 export function getTripBalance(tripId: number) {

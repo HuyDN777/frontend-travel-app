@@ -2,6 +2,7 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AccessGate } from '@/components/auth/access-gate';
 import { ThemedText } from '@/components/themed-text';
@@ -22,6 +23,7 @@ export default function SignUpScreen() {
   const router = useRouter();
   const scheme = useColorScheme() ?? 'light';
   const palette = Colors[scheme];
+  const insets = useSafeAreaInsets();
 
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
@@ -175,14 +177,14 @@ export default function SignUpScreen() {
           keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
         >
           <ScrollView
-            contentContainerStyle={styles.content}
+            contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.sm }]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           >
             <Card padded={false} style={styles.heroCard}>
               <Image
-                source={{ uri: 'https://images.unsplash.com/photo-1528164344705-47542687000d?auto=format&fit=crop&w=1200&q=80' }}
+                source={{ uri: 'https://images.unsplash.com/photo-1555921015-5532091f6026?auto=format&fit=crop&w=1200&q=80' }}
                 style={styles.heroImage}
                 contentFit="cover"
               />
