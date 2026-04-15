@@ -86,19 +86,19 @@ export default function AdminDashboardScreen() {
         </Card>
         <Card style={styles.statCardSmall}>
           <View style={styles.metricIconSmall}>
-            <Ionicons name="bar-chart-outline" size={18} color={palette.text} />
+            <Ionicons name="document-text-outline" size={18} color={palette.text} />
           </View>
-          <Text style={styles.metricValueSmall}>{metrics.activeUsers.toLocaleString('vi-VN')}</Text>
-          <Text style={styles.metricLabelSmall}>Hoạt động</Text>
+          <Text style={styles.metricValueSmall}>{metrics.totalPosts.toLocaleString('vi-VN')}</Text>
+          <Text style={styles.metricLabelSmall}>Số bài đăng</Text>
         </Card>
       </View>
 
       <Card style={styles.chartCard}>
         <View style={styles.chartHeader}>
           <View>
-            <Text style={[Typography.bodySemi, { color: palette.text }]}>Hoạt động cộng đồng 7 ngày</Text>
+            <Text style={[Typography.bodySemi, { color: palette.text }]}>Biểu đồ đăng bài 7 ngày</Text>
             <Text style={[Typography.caption, { color: palette.textMuted }]}>
-              Bài viết mới dùng để theo dõi nhịp hoạt động và moderation queue.
+              Số lượng bài viết mới được đăng tải trong thời gian qua.
             </Text>
           </View>
           <View style={[styles.chartChip, { backgroundColor: palette.surfaceMuted }]}>
@@ -143,10 +143,10 @@ export default function AdminDashboardScreen() {
       />
       <MenuCard
         icon="shield-checkmark-outline"
-        title="Kiểm duyệt Bài cộng đồng"
-        subtitle="Xemét nội dung và kiểm duyệt bảng tin"
-        badge={`${moderationQueue.length} chờ duyệt`}
-        badgeTone="danger"
+        title="Quản lý Bài viết Cộng đồng"
+        subtitle="Xem xét nội dung và kiểm duyệt bảng tin"
+        badge={`${metrics.totalPosts} bài viết`}
+        badgeTone="neutral"
         onPress={() => router.push('/admin/moderation')}
       />
       <MenuCard

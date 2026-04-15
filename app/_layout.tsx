@@ -26,6 +26,7 @@ export default function RootLayout() {
         <Stack.Screen name="community-my-posts" options={{ headerShown: false }} />
         <Stack.Screen name="edit-profile" options={{ headerShown: false }} />
         <Stack.Screen name="admin-panel" options={{ headerShown: false }} />
+        <Stack.Screen name="admin" options={{ headerShown: false, gestureEnabled: false }} />
         <Stack.Screen name="flights" options={{ title: 'Chuyến bay', presentation: 'card' }} />
         <Stack.Screen name="hotels" options={{ title: 'Khách sạn', presentation: 'card' }} />
         <Stack.Screen name="restaurants" options={{ title: 'Nhà hàng', presentation: 'card' }} />
