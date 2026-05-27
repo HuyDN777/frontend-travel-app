@@ -26,7 +26,7 @@ import { Card } from '@/components/ui/card';
 import { Colors, Elevation, Radius, Spacing, Typography } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { requestAiItinerary, requestCityDataSuggestions, requestAiChat } from '@/services/aiItineraryService';
-import { searchCityData } from '@/services/knowledgeService';
+import { searchCityData, type LocalResult } from '@/services/knowledgeService';
 import { applyDayPlansToDraft } from '@/stores/planDraftStore';
 import type {
   AiItineraryResponse,
@@ -135,6 +135,7 @@ const FALLBACK_IMAGES = {
   cafe: 'https://images.unsplash.com/photo-1507133750040-4a8f5700e53f?q=80&w=800&auto=format&fit=crop',
 };
 
+/** Lấy ảnh dự phòng theo loại địa điểm và thành phố để thẻ gợi ý luôn có hình minh họa. */
 function getFallbackImage(isRestaurant: boolean, isCafe: boolean, city?: string, type?: string, title?: string): string {
   if (isRestaurant) return FALLBACK_IMAGES.restaurant;
   if (isCafe) return FALLBACK_IMAGES.cafe;
@@ -163,12 +164,20 @@ function extractDestination(raw: string): string {
 
   const n = stripVi(t);
 
+  // 1. Phải khớp với các địa danh đã biết trước
   for (const { canon, needles } of KNOWN_PLACES_EXT) {
     for (const needle of needles) {
       if (n.includes(needle)) return canon;
     }
   }
 
+  // 2. Chặn nếu câu có chứa "3 ngày", "2 ngày" mà không khớp địa danh nào ở trên
+  const dayPattern = /(\d+)\s*(ngay|day)/i;
+  if (dayPattern.test(n)) {
+    return ''; 
+  }
+
+  // 3. Xử lý bóc tách text thừa
   let rest = t
     .replace(/^tôi\s+muốn\s+(đi|đến|tới)\s+/iu, '')
     .replace(/^mình\s+muốn\s+(đi|đến|tới)\s+/iu, '')
@@ -179,12 +188,14 @@ function extractDestination(raw: string): string {
     .replace(/\s*(nhé|nha|ạ|nhỉ|đi|!|。)*$/iu, '')
     .trim();
 
+  // 4. Kiểm tra lại rest sau khi bóc tách
   for (const { canon, needles } of KNOWN_PLACES) {
     for (const needle of needles) {
       if (stripVi(rest).includes(needle)) return canon;
     }
   }
 
+  // Cuối cùng: nếu không phải số ngày thì mới trả về rest hoặc t
   return rest || t;
 }
 
@@ -277,6 +288,7 @@ function extractPrefsTags(text: string): string[] {
   if (/chua|van hoa|lich su|co|bao tang|dinh|den|heritage/.test(n)) found.push('culture');
   if (/leo|nui|rung|mao hiem|trekking|adventure|thac|dong/.test(n)) found.push('adventure');
   if (/tre em|gia dinh|vui choi|park|family|cong vien/.test(n)) found.push('family');
+  if (/nguoi gia|cao tuoi|ong ba|bo me gia|nguoi lon tuoi/.test(n)) found.push('family'); // Grouping with family for backend processing
   if (/chay|vegan|vegetarian/.test(n)) found.push('chay');
   return found;
 }
@@ -326,10 +338,19 @@ export default function AiItineraryScreen() {
   const [editStartTime, setEditStartTime] = useState('');
   const [editDuration, setEditDuration] = useState('');
 
+  // New states for advanced editing
+  const [isAdding, setIsAdding] = useState(false);
+  const [targetDayIndex, setTargetDayIndex] = useState<number | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<LocalResult[]>([]);
+  const [searching, setSearching] = useState(false);
+
+  /** Thêm một tin nhắn mới vào khung chat. */
   const append = useCallback((role: ChatRole, text: string) => {
     setMessages((prev) => [...prev, { id: nextId(), role, text }]);
   }, []);
 
+  // Khởi tạo cuộc trò chuyện mặc định khi mở màn hình.
   useEffect(() => {
     setMessages([
       {
@@ -343,11 +364,13 @@ export default function AiItineraryScreen() {
     setStep('destination');
   }, []);
 
+  // Tự cuộn xuống cuối khi có tin nhắn hoặc kết quả lịch mới.
   useEffect(() => {
     const t = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
     return () => clearTimeout(t);
   }, [messages, result, loading]);
 
+  /** Hiển thị hoạt động theo dữ liệu đã chỉnh sửa nếu người dùng có can thiệp. */
   const displayActivity = useCallback(
     (act: SuggestedActivity) => {
       const e = activityEdits[act.id];
@@ -384,30 +407,151 @@ export default function AiItineraryScreen() {
     [parseStartMinutes],
   );
 
+  /** Mở hộp thoại chỉnh sửa một hoạt động đã có trong lịch. */
   const openEdit = (act: SuggestedActivity) => {
+    setIsAdding(false);
+    setTargetDayIndex(null);
     const d = displayActivity(act);
     setEditTitle(d.title);
-    // Personal note should only contain user-entered note, not AI place description.
     setEditDescription(activityEdits[act.id]?.description ?? '');
     setEditStartTime(d.startTime);
     setEditDuration(d.duration);
     setEditTarget(act);
+    setSearchQuery('');
+    setSearchResults([]);
   };
 
+  /** Thêm một hoạt động mới vào một ngày cụ thể của lịch gợi ý. */
+  const openAddActivity = (dayIndex: number) => {
+    setIsAdding(true);
+    setTargetDayIndex(dayIndex);
+    setEditTitle('');
+    setEditDescription('');
+    setEditStartTime('09:00');
+    setEditDuration('2h');
+    setEditTarget({ id: `new-${Date.now()}`, title: '', estimatedDuration: '2h' });
+    setSearchQuery('');
+    setSearchResults([]);
+  };
+
+  /** Lưu thay đổi chỉnh sửa hoặc hoạt động mới vào trạng thái kết quả hiện tại. */
   const saveEdit = () => {
     if (!editTarget) return;
-    setActivityEdits((prev) => ({
-      ...prev,
-      [editTarget.id]: {
-        title: editTitle.trim() || editTarget.title,
-        description: editDescription,
-        startTime: editStartTime.trim(),
-        duration: editDuration.trim(),
-      },
-    }));
+
+    if (isAdding && targetDayIndex !== null) {
+      // Add new activity to result state
+      setResult(prev => {
+        if (!prev) return null;
+        const next = { ...prev };
+        next.days = next.days.map(d => {
+          if (d.dayIndex === targetDayIndex) {
+            return {
+              ...d,
+              activities: [...d.activities, { ...editTarget, title: editTitle || 'Hoạt động mới', suggestedStart: editStartTime, estimatedDuration: editDuration }]
+            };
+          }
+          return d;
+        });
+        return next;
+      });
+      // Accept it by default
+      setAcceptedActivityIds(prev => new Set(prev).add(editTarget.id));
+      
+      // Save manual edits if any
+      setActivityEdits(prev => ({
+        ...prev,
+        [editTarget.id]: {
+          title: editTitle.trim() || 'Hoạt động mới',
+          description: editDescription,
+          startTime: editStartTime.trim(),
+          duration: editDuration.trim(),
+        }
+      }));
+    } else {
+      // Standard Edit
+      setActivityEdits((prev) => ({
+        ...prev,
+        [editTarget.id]: {
+          title: editTitle.trim() || editTarget.title,
+          description: editDescription,
+          startTime: editStartTime.trim(),
+          duration: editDuration.trim(),
+        },
+      }));
+    }
     setEditTarget(null);
   };
 
+  /** Xóa một hoạt động khỏi lịch đang hiển thị và cập nhật danh sách đã chọn. */
+  const handleRemoveActivity = (dayIndex: number, activityId: string) => {
+    Alert.alert('Xóa hoạt động', 'Bạn có chắc muốn xóa hoạt động này khỏi gợi ý?', [
+      { text: 'Hủy', style: 'cancel' },
+      {
+        text: 'Xóa',
+        style: 'destructive',
+        onPress: () => {
+          setResult(prev => {
+            if (!prev) return null;
+            const next = { ...prev };
+            next.days = next.days.map(d => {
+              if (d.dayIndex === dayIndex) {
+                return {
+                  ...d,
+                  activities: d.activities.filter(a => a.id !== activityId)
+                };
+              }
+              return d;
+            });
+            return next;
+          });
+          setAcceptedActivityIds(prev => {
+            const next = new Set(prev);
+            next.delete(activityId);
+            return next;
+          });
+        }
+      }
+    ]);
+  };
+
+  /** Tìm kiếm dữ liệu địa điểm thay thế từ backend/nguồn dữ liệu hỗ trợ. */
+  const handleReplaceSearch = async () => {
+    const q = searchQuery.trim();
+    if (!q) return;
+    setSearching(true);
+    try {
+      const res = await requestCityDataSuggestions(destination, 'tourism', q);
+      setSearchResults(res);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  /** Áp một địa điểm mới vào hoạt động đang chỉnh sửa. */
+  const applyReplacement = (place: LocalResult) => {
+    setEditTitle(place.title);
+    if (place.description) {
+      setEditDescription(prev => prev ? `${prev}\n\n${place.description}` : place.description!);
+    }
+    // Update thumbnail in editTarget if needed, though result state is better
+    if (editTarget) {
+      setEditTarget({
+        ...editTarget,
+        title: place.title,
+        thumbnail: place.thumbnail || editTarget.thumbnail,
+        address: place.address || editTarget.address,
+        rating: place.rating || editTarget.rating,
+        reviews: place.reviews || editTarget.reviews,
+        type: place.type || editTarget.type,
+      });
+    }
+    setSearchResults([]);
+    setSearchQuery('');
+  };
+
+  /** Khôi phục hoạt động đang chỉnh sửa về nội dung gốc từ AI. */
   const resetActivityToOriginal = () => {
     if (!editTarget) return;
     setActivityEdits((prev) => {
@@ -421,10 +565,12 @@ export default function AiItineraryScreen() {
     setEditDuration(editTarget.estimatedDuration ?? '');
   };
 
+  /** Bật hoặc tắt một sở thích du lịch. */
   const togglePref = (id: string) => {
     setPrefs((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
   };
 
+  /** Chọn hoặc bỏ chọn một hoạt động trong danh sách gợi ý. */
   const toggleActivity = (activityId: string, value: boolean) => {
     setAcceptedActivityIds((prev) => {
       const next = new Set(prev);
@@ -434,6 +580,7 @@ export default function AiItineraryScreen() {
     });
   };
 
+  /** Chọn hoặc bỏ chọn toàn bộ hoạt động của một ngày. */
   const selectAllInDay = (day: SuggestedDay, value: boolean) => {
     setAcceptedActivityIds((prev) => {
       const next = new Set(prev);
@@ -448,6 +595,7 @@ export default function AiItineraryScreen() {
   const dayFullySelected = (day: SuggestedDay) =>
     day.activities.length > 0 && day.activities.every((a) => acceptedActivityIds.has(a.id));
 
+  /** Chuyển sang bước chọn sở thích trong luồng thu thập tham số. */
   const goPreferences = () => {
     setStep('preferences');
     append(
@@ -456,6 +604,7 @@ export default function AiItineraryScreen() {
     );
   };
 
+  /** Sang bước chọn ngân sách và ghi lại sở thích đã chọn. */
   const goBudget = () => {
     const labels = PREFERENCE_OPTIONS.filter((o) => prefs.includes(o.id)).map((o) => o.label);
     append('user', labels.length ? labels.join(', ') : 'Không chọn cụ thể');
@@ -466,6 +615,7 @@ export default function AiItineraryScreen() {
     );
   };
 
+  /** Sang bước chọn mức hoạt động cho lịch trình. */
   const goActivityLevel = (budgetLabel: string) => {
     append('user', budgetLabel);
     setStep('activity');
@@ -475,6 +625,7 @@ export default function AiItineraryScreen() {
     );
   };
 
+  /** Sang bước nhập ngày bắt đầu của chuyến đi. */
   const goStartDate = (activityLabel: string) => {
     append('user', activityLabel);
     setStep('startDate');
@@ -484,6 +635,7 @@ export default function AiItineraryScreen() {
     );
   };
 
+  /** Tóm tắt toàn bộ thông tin người dùng trước khi gọi API sinh lịch. */
   const goConfirm = (dateLine: string, overrides?: { dest?: string, days?: string, prefs?: string[], budget?: BudgetTier, activity?: ActivityLevel, start?: string }) => {
     append('user', dateLine);
     
@@ -507,6 +659,7 @@ export default function AiItineraryScreen() {
     setStep('confirm');
   };
 
+  /** Xử lý tin nhắn người dùng: nhận diện tham số hoặc chuyển sang chat tự do. */
   const processInput = async (text: string) => {
     const raw = text.trim();
     if (!raw) return;
@@ -514,13 +667,13 @@ export default function AiItineraryScreen() {
     append('user', raw);
     const n = stripVi(raw);
 
-    // 1. Check for "Submit/Run" intents if we have basic info
+    // Nếu đã có đủ thông tin và người dùng muốn tạo lịch thì gọi API AI ngay.
     if (destination && dayCountStr && dayCountStr !== '0' && /gợi ý|ok|đồng ý|làm đi|bắt đầu|xong/.test(n.toLowerCase())) {
       void runAiFromChat();
       return;
     }
 
-    // 2. Perform global extraction from current message
+    // Trích xuất các tham số từ câu chat hiện tại.
     const extractedDest = extractDestination(raw);
     const extractedDays = extractDayCount(raw);
     const extractedBudget = extractBudgetTier(raw);
@@ -537,27 +690,17 @@ export default function AiItineraryScreen() {
     let feedbackParts: string[] = [];
 
     if (extractedDest && extractedDest !== destination) {
-      if (SUPPORTED_CITIES_CANON.includes(extractedDest)) {
-        updatedDest = extractedDest;
-        setDestination(extractedDest);
-        feedbackParts.push(`điểm đến **${extractedDest}**`);
-      } else if (step === 'destination') {
-        // Only show "Unsupported City" error if we are explicitly asking for a destination
-        const isNumeric = /^\d+$/.test(raw);
-        const isTrash = raw.length < 2 || /^[^a-zA-Zà-ỹÀ-Ỹ ]+$/.test(raw);
-
-        const errorMsg = (isNumeric || isTrash)
-          ? `⚠️ **Lỗi: Không nhận diện được địa danh.**\n\nHệ thống không tìm thấy địa điểm **'${raw}'** trong danh sách hỗ trợ.\n\nBạn hãy gõ tên tỉnh/thành phố (ví dụ: Hà Nội, Đà Nẵng, Phú Quốc...) hoặc chọn gợi ý bên dưới giúp mình nhé.`
-          : `Xin lỗi, hiện tại mình mới chỉ hỗ trợ dữ liệu cho 12 tỉnh/thành phố phổ biến: ${SUPPORTED_CITIES_CANON.join(', ')}.\n\nĐịa điểm **'${extractedDest}'** chưa có trong hệ thống, bạn vui lòng chọn lại nhé! ✨`;
-
-        append('assistant', errorMsg);
-        setStep('destination');
-        return; // HALT execution
-      }
+      updatedDest = extractedDest;
+      setDestination(extractedDest);
+      feedbackParts.push(`điểm đến **${extractedDest}**`);
     } else if (step === 'destination' && !extractedDest) {
-      // Step-specific safeguard
-      append('assistant', `⚠️ **Lỗi: Vui lòng nhập tên địa danh.**\n\nMình chưa nhận diện được điểm đến của bạn. Bạn muốn đi đâu? (Ví dụ: Hà Nội, Đà Lạt...)`);
-      return;
+      // If we're at destination step but can't find a city name, 
+      // allow floating chat to handle it instead of halting with an error.
+      const isParamQuery = /ngay|day|lich trinh|itinerary|ke hoach/.test(n);
+      if (isParamQuery) {
+        append('assistant', `⚠️ **Lỗi: Vui lòng nhập tên địa danh.**\n\nMình chưa nhận diện được điểm đến của bạn. Bạn muốn đi đâu? (Ví dụ: Hà Nội, Đà Lạt...)`);
+        return;
+      }
     }
 
     if (extractedDays) {
@@ -586,7 +729,7 @@ export default function AiItineraryScreen() {
       feedbackParts.push(`thích **${pLabels}**`);
     }
 
-    // Special check for Start Date (ưu tiên DD/MM/YYYY; vẫn chấp nhận YYYY-MM-DD để tương thích)
+    // Kiểm tra ngày bắt đầu, ưu tiên DD/MM/YYYY nhưng vẫn hỗ trợ YYYY-MM-DD.
     const parsedStartDate = parseFlexibleStartDate(raw);
     if (parsedStartDate) {
       updatedStart = parsedStartDate;
@@ -594,60 +737,64 @@ export default function AiItineraryScreen() {
       feedbackParts.push(`ngày bắt đầu **${formatStartDateForUser(parsedStartDate)}**`);
     }
 
-    // 3. Acknowledge what we found
-    if (feedbackParts.length > 0) {
+    // Phản hồi xác nhận những tham số đã nhận diện được.
+    const isChatty = /goi y|di dau|nguoi gia|tre em|cho nao|tu van|the nao|choi gi|hay khong|co gi|re khong|dep khong/.test(n);
+    
+    if (feedbackParts.length > 0 && !isChatty) {
       const ack = `Tuyệt, mình đã ghi nhận: ${feedbackParts.join(', ')}.`;
       append('assistant', ack);
     }
 
-    // 4. Decide "What's missing?" and transition
-    if (!updatedDest) {
-      setStep('destination');
-      append('assistant', 'Bạn muốn đi **đâu**? Hãy gõ tên thành phố nhé.');
-      return;
-    }
+    // Nếu còn thiếu tham số thì chuyển sang bước tiếp theo trong hội thoại.
+    if (!isChatty) {
+      if (!updatedDest) {
+        setStep('destination');
+        append('assistant', 'Bạn muốn đi **đâu**? Hãy gõ tên thành phố nhé.');
+        return;
+      }
 
-    if (!updatedDays || updatedDays === '0') {
-      setStep('days');
-      append('assistant', `Bạn định đi **${updatedDest}** trong bao nhiêu ngày? (1-14 ngày)`);
-      return;
-    }
+      if (!updatedDays || updatedDays === '0') {
+        setStep('days');
+        append('assistant', `Bạn định đi **${updatedDest}** trong bao nhiêu ngày? (1-14 ngày)`);
+        return;
+      }
 
-    // Follow intended flow: days -> preferences -> budget -> activity -> startDate -> confirm
-    if (updatedPrefs.length === 0) {
-      if (step !== 'preferences') {
-        setStep('preferences');
-        append('assistant', 'Sở thích của bạn là gì? Bạn có thể chọn bên dưới hoặc gõ tự do (ví dụ "mạo hiểm", "văn hóa").');
+      // Luồng thu thập chuẩn: ngày -> sở thích -> ngân sách -> hoạt động -> ngày bắt đầu -> xác nhận.
+      if (updatedPrefs.length === 0) {
+        if (step !== 'preferences') {
+          setStep('preferences');
+          append('assistant', 'Sở thích của bạn là gì? Bạn có thể chọn bên dưới hoặc gõ tự do (ví dụ "mạo hiểm", "văn hóa").');
+          return;
+        }
+      }
+
+      if (!updatedBudget && step !== 'budget' && step !== 'confirm') {
+         setStep('budget');
+         append('assistant', 'Bạn muốn mức **ngân sách** tham khảo nào? (Tiết kiệm, Vừa phải, Thoải mái)');
+         return;
+      }
+
+      if (!updatedActivity) {
+        setStep('activity');
+        append('assistant', 'Bạn muốn lịch trình có **ít / vừa** hoạt động mỗi ngày? Chọn một mức bên dưới nhé.');
+        return;
+      }
+
+      // Khi đã đủ thông tin thì chuyển sang màn xác nhận trước khi gọi AI.
+      if (updatedDest && updatedDays && updatedDays !== '0') {
+        goConfirm("Ghi nhận thông tin", { 
+          dest: updatedDest, 
+          days: updatedDays, 
+          budget: updatedBudget, 
+          activity: updatedActivity ?? undefined,
+          prefs: updatedPrefs,
+          start: updatedStart,
+        });
         return;
       }
     }
 
-    if (!updatedBudget && step !== 'budget' && step !== 'confirm') {
-       setStep('budget');
-       append('assistant', 'Bạn muốn mức **ngân sách** tham khảo nào? (Tiết kiệm, Vừa phải, Thoải mái)');
-       return;
-    }
-
-    if (!updatedActivity) {
-      setStep('activity');
-      append('assistant', 'Bạn muốn lịch trình có **ít / vừa** hoạt động mỗi ngày? Chọn một mức bên dưới nhé.');
-      return;
-    }
-
-    // If everything is basically filled or user seems done
-    if (updatedDest && updatedDays && updatedDays !== '0') {
-      goConfirm("Ghi nhận thông tin", { 
-        dest: updatedDest, 
-        days: updatedDays, 
-        budget: updatedBudget, 
-        activity: updatedActivity ?? undefined,
-        prefs: updatedPrefs,
-        start: updatedStart,
-      });
-      return;
-    }
-
-    // 5. Fallback: If not a parameter collection step, send to Gemini Chat
+    // Nếu không phải luồng thu thập tham số, chuyển sang chatbot tự do.
     setLoading(true);
     try {
       const chatRes = await requestAiChat({ message: raw, sessionId });
@@ -660,14 +807,17 @@ export default function AiItineraryScreen() {
     }
   };
 
+  /** Chọn điểm đến bằng cách nạp trực tiếp vào luồng xử lý chat. */
   const handleDestination = (city: string) => {
     void processInput(city);
   };
 
+  /** Chọn số ngày bằng nút gợi ý thay vì phải nhập thủ công. */
   const handleDays = (days: string) => {
     void processInput(days.includes('ngày') ? days : `${days} ngày`);
   };
 
+  /** Gọi backend sinh lịch trình AI từ toàn bộ thông tin đã thu thập. */
   const runAiFromChat = async () => {
     const n = parseInt(dayCountStr, 10);
     if (!destination.trim() || Number.isNaN(n) || n < 1 || n > 14) {
@@ -679,6 +829,7 @@ export default function AiItineraryScreen() {
     setLoading(true);
     append('assistant', 'Đang gọi dịch vụ AI… một chút thôi ✨');
     try {
+      // Gọi API sinh lịch trình đã được tách riêng ở service frontend.
       const prefLabels = PREFERENCE_OPTIONS.filter((o) => prefs.includes(o.id)).map((o) => o.label);
       const res = await requestAiItinerary({
         destination: destination.trim(),
@@ -710,6 +861,7 @@ export default function AiItineraryScreen() {
     }
   };
 
+  /** Chuyển kết quả AI thành danh sách kế hoạch nháp để lưu vào ứng dụng. */
   const buildDayPlans = useCallback((): DayPlan[] => {
     if (!result) return [];
     const plans: DayPlan[] = [];
@@ -735,6 +887,7 @@ export default function AiItineraryScreen() {
     return plans;
   }, [result, acceptedActivityIds, displayActivity, sortByStartTime]);
 
+  /** Định dạng ngày sang chuỗi YYYY-MM-DD để gửi lên backend. */
   const formatDate = (d: Date): string => {
     const yyyy = d.getFullYear();
     const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -742,6 +895,7 @@ export default function AiItineraryScreen() {
     return `${yyyy}-${mm}-${dd}`;
   };
 
+  /** Áp lịch đã chọn vào kế hoạch nháp và lưu thành chuyến đi chính thức nếu có thể. */
   const applyToDraft = async () => {
     const plans = buildDayPlans();
     if (plans.length === 0) {
@@ -774,6 +928,7 @@ export default function AiItineraryScreen() {
 
     try {
       setSavingTrip(true);
+      // Tạo bảng tra ảnh để chuyến đi lưu kèm thumbnail của từng hoạt động.
       const thumbnailByActivityId = new Map<string, string>();
       if (result) {
         for (const day of result.days) {
@@ -785,6 +940,7 @@ export default function AiItineraryScreen() {
         }
       }
 
+      // Gọi API tạo chuyến đi của backend sau khi người dùng đã chốt lịch.
       await createTrip({
         tripName: tripNameBase,
         destination: destination.trim() || 'Việt Nam',
@@ -821,6 +977,7 @@ export default function AiItineraryScreen() {
     }
   };
 
+  /** Khởi động lại toàn bộ hội thoại chatbot và xóa dữ liệu nhập trước đó. */
   const resetChat = () => {
     msgId = 0;
     setStep('destination');
@@ -846,6 +1003,7 @@ export default function AiItineraryScreen() {
     ]);
   };
 
+  /** Xử lý các truy vấn nhanh về địa điểm/nhà hàng/cafe mà không cần sinh lịch đầy đủ. */
   const handleDirectQuery = async (text: string): Promise<boolean> => {
     const t = text.toLowerCase();
     const city = extractDestination(text);
@@ -857,6 +1015,7 @@ export default function AiItineraryScreen() {
     else if (t.includes('tham quan') || t.includes('chỗ chơi') || t.includes('địa điểm') || t.includes('du lịch')) category = 'tourism';
 
     if (category) {
+      // Ưu tiên gọi API gợi ý từ backend, nếu không có thì fallback sang dữ liệu local.
       let results = await requestCityDataSuggestions(city, category, text);
       if (results.length === 0) {
         results = searchCityData(city, category);
@@ -894,6 +1053,7 @@ export default function AiItineraryScreen() {
     return false;
   };
 
+  /** Gửi nội dung đang nhập vào luồng xử lý chat. */
   const onSend = () => {
     const t = input.trim();
     setInput('');
@@ -1147,6 +1307,15 @@ export default function AiItineraryScreen() {
                               Bản đồ
                             </Text>
                           </Pressable>
+                          <Pressable 
+                            onPress={() => handleRemoveActivity(day.dayIndex, act.id)} 
+                            style={[styles.editLink, { marginLeft: Spacing.md }]}
+                          >
+                            <Ionicons name="trash-outline" size={14} color="#E74C3C" style={{ marginRight: 4 }} />
+                            <Text style={[Typography.caption, { color: "#E74C3C", fontWeight: '700' }]}>
+                              Xóa
+                            </Text>
+                          </Pressable>
                         </View>
                       </View>
                       <Switch
@@ -1158,6 +1327,15 @@ export default function AiItineraryScreen() {
                   );
                 })}
 
+                <Pressable
+                  onPress={() => openAddActivity(day.dayIndex)}
+                  style={[styles.addActivityBtn, { borderColor: palette.primary }]}
+                >
+                  <Ionicons name="add-circle-outline" size={20} color={palette.primary} />
+                  <Text style={[Typography.bodySemi, { color: palette.primary, marginLeft: 8 }]}>
+                    Thêm hoạt động cho ngày {day.dayIndex}
+                  </Text>
+                </Pressable>
               </Card>
               );
             })}
@@ -1338,10 +1516,39 @@ export default function AiItineraryScreen() {
         >
           <Pressable style={styles.modalBackdrop} onPress={() => setEditTarget(null)} />
           <View style={[styles.modalCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-            <Text style={[Typography.titleLG, { color: palette.text }]}>Sửa hoạt động</Text>
+            <Text style={[Typography.titleLG, { color: palette.text }]}>
+              {isAdding ? 'Thêm hoạt động mới' : 'Sửa hoạt động'}
+            </Text>
             <Text style={[Typography.caption, { color: palette.textMuted, marginTop: Spacing.xs }]}>
               Nội dung sau khi lưu sẽ đi vào DayPlan khi bạn áp dụng.
             </Text>
+
+            <View style={{ marginTop: Spacing.md, padding: Spacing.sm, backgroundColor: palette.primary + '10', borderRadius: Radius.md, borderWidth: 1, borderColor: palette.primary + '20' }}>
+              <Text style={[Typography.caption, { color: palette.primary, fontWeight: '700' }]}>Tìm và thay thế địa điểm</Text>
+              <View style={{ flexDirection: 'row', gap: Spacing.sm, marginTop: 4, alignItems: 'center' }}>
+                <TextInput
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholder="Nhập tên địa danh để AI tìm..."
+                  placeholderTextColor={palette.textMuted}
+                  style={[styles.modalInput, { flex: 1, marginBottom: 0, backgroundColor: palette.surface, height: 40 }]}
+                  onSubmitEditing={handleReplaceSearch}
+                />
+                <Button title="Tìm" onPress={handleReplaceSearch} loading={searching} size="sm" style={{ height: 40 }} />
+              </View>
+              {searchResults.length > 0 && (
+                <View style={{ maxHeight: 150, marginTop: Spacing.xs, backgroundColor: palette.surface, borderRadius: Radius.sm, borderWidth: 1, borderColor: palette.border }}>
+                  <ScrollView nestedScrollEnabled style={{ paddingHorizontal: Spacing.sm }}>
+                    {searchResults.map((r, i) => (
+                      <Pressable key={i} onPress={() => applyReplacement(r)} style={{ paddingVertical: 8, borderBottomWidth: i === searchResults.length - 1 ? 0 : 0.5, borderBottomColor: palette.border }}>
+                        <Text style={[Typography.bodySemi, { color: palette.text, fontSize: 13 }]}>{r.title}</Text>
+                        <Text style={[Typography.caption, { color: palette.textMuted, fontSize: 11 }]} numberOfLines={1}>{r.address || r.type || 'Địa điểm gần bạn'}</Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+            </View>
             <Text style={[Typography.caption, { color: palette.textMuted, marginTop: Spacing.md }]}>Tên</Text>
             <TextInput
               value={editTitle}
@@ -1684,5 +1891,15 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: Spacing.md,
     justifyContent: 'center',
+  },
+  addActivityBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Spacing.md,
+    marginTop: Spacing.sm,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderStyle: 'dashed',
   },
 });

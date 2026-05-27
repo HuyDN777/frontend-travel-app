@@ -183,6 +183,7 @@ function isBeachPreference(pref: string): boolean {
 }
 
 function adaptRequestForDestination(req: AiItineraryRequest): { adjusted: AiItineraryRequest; note?: string } {
+  // Điều chỉnh yêu cầu cho các trường hợp dữ liệu thực tế không phù hợp với mong đợi người dùng.
   const destinationNorm = stripVi(req.destination);
   const isHanoi = destinationNorm.includes('ha noi') || destinationNorm.includes('hanoi');
   const hasBeachPref = req.preferences.some((p) => isBeachPreference(p));
@@ -205,6 +206,7 @@ function adaptRequestForDestination(req: AiItineraryRequest): { adjusted: AiItin
 }
 
 function withSummaryNote(response: AiItineraryResponse, note?: string): AiItineraryResponse {
+  // Ghép thêm ghi chú để người dùng hiểu vì sao lịch trình được điều chỉnh.
   if (!note) return response;
   return {
     ...response,
@@ -341,6 +343,7 @@ function normalizeAiItineraryResponse(data: unknown, req: AiItineraryRequest): A
 }
 
 async function callOpenAiCompatibleChat(messages: ChatMessage[]): Promise<string | null> {
+  // Gọi LLM bên ngoài nếu dự án có cấu hình OpenAI-compatible endpoint.
   if (!LLM_CONFIG) return null;
 
   const baseUrl = LLM_CONFIG.baseUrl.replace(/\/$/, '');
@@ -373,6 +376,7 @@ async function callOpenAiCompatibleChat(messages: ChatMessage[]): Promise<string
 }
 
 function buildRagPrompt(req: AiItineraryRequest, tourism: LocalResult[], restaurants: LocalResult[], cafes: LocalResult[], knowledge: TourismItem[]): ChatMessage[] {
+  // Tạo prompt có ngữ cảnh từ SerpAPI và knowledge base để AI sinh lịch trình sát thực tế hơn.
   const prefLine = req.preferences.length ? req.preferences.join(', ') : 'đa dạng';
   const budgetLine = req.budgetTier === 'low' ? 'tiết kiệm' : req.budgetTier === 'high' ? 'thoải mái' : 'vừa phải';
   const activityLine = activityLevelLabel(req.activityLevel);
@@ -419,6 +423,7 @@ Yêu cầu:
 }
 
 async function buildResponseFromLlm(req: AiItineraryRequest): Promise<AiItineraryResponse | null> {
+  // Ưu tiên dùng LLM ngoài khi có cấu hình hợp lệ.
   if (!LLM_CONFIG) return null;
 
   const dest = req.destination.trim();
@@ -463,6 +468,7 @@ async function fetchSerpApiLocalResults(
   category: 'tourism' | 'restaurant' | 'cafe',
   query?: string,
 ): Promise<LocalResult[]> {
+  // Lấy dữ liệu địa điểm từ SerpAPI Google Maps để làm nguồn tham chiếu thực tế.
   if (!SERPAPI_KEY) return [];
 
   const searchParams = new URLSearchParams({
@@ -1220,6 +1226,7 @@ async function buildResponseFromSerpApi(req: AiItineraryRequest): Promise<AiItin
  * Gọi backend AI nếu có EXPO_PUBLIC_AI_ITINERARY_URL; ngược lại dùng mock có cấu trúc giống contract API.
  */
 export async function requestAiItinerary(req: AiItineraryRequest): Promise<AiItineraryResponse> {
+  // Luồng ưu tiên: LLM ngoài -> SerpAPI -> backend Spring Boot -> knowledge base nội bộ.
   const { adjusted, note } = adaptRequestForDestination(req);
 
   const llmResponse = await buildResponseFromLlm(adjusted);
@@ -1262,6 +1269,7 @@ export async function requestCityDataSuggestions(
   category: 'tourism' | 'restaurant' | 'cafe',
   query?: string,
 ): Promise<LocalResult[]> {
+  // Gợi ý dữ liệu địa điểm cho chatbot và màn hình chỉnh sửa lịch.
   if (SERPAPI_KEY) {
     const serpResults = await fetchSerpApiLocalResults(destination, category, query);
     if (serpResults.length > 0) return serpResults;
@@ -1295,6 +1303,7 @@ export interface AiChatResponse {
  * Gọi API Chat tự do (Gemini + RAG) từ Backend.
  */
 export async function requestAiChat(req: AiChatRequest): Promise<AiChatResponse> {
+  // Gọi API chat tự do của backend để nhận phản hồi theo ngữ cảnh phiên chat.
   if (!API_BASE_URL) {
     throw new Error('Chưa cấu hình API_BASE_URL');
   }
