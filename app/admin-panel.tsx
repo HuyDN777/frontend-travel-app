@@ -18,6 +18,7 @@ import {
 } from '@/utils/api';
 import { getSessionUser, getSessionUserId } from '@/utils/session';
 
+// Admin dashboard overview for users and posts.
 export default function AdminPanelScreen() {
   const scheme = useColorScheme() ?? 'light';
   const palette = Colors[scheme];
@@ -28,6 +29,7 @@ export default function AdminPanelScreen() {
 
   const activeUsers = useMemo(() => users.filter((item) => item.role !== 'BANNED').length, [users]);
 
+  // Load admin dashboard data.
   const loadDashboard = useCallback(async () => {
     const userId = getSessionUserId();
     if (!userId) {
@@ -54,6 +56,7 @@ export default function AdminPanelScreen() {
     void loadDashboard();
   }, [loadDashboard]);
 
+  // Toggle a user's role between ADMIN and USER.
   async function handleToggleRole(user: UserProfile) {
     const userId = getSessionUserId();
     if (!userId) return;
@@ -67,6 +70,7 @@ export default function AdminPanelScreen() {
     }
   }
 
+  // Delete a community post from admin panel.
   async function handleDeletePost(postId: number) {
     const userId = getSessionUserId();
     if (!userId) return;

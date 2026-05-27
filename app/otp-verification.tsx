@@ -25,6 +25,7 @@ export type OTPVerificationScreenProps = {
   onBack?: () => void;
 };
 
+// OTP verification screen for email confirmation.
 export default function OTPVerificationScreen({
   email,
   registrationData,
@@ -57,6 +58,7 @@ export default function OTPVerificationScreen({
   const minutes = Math.floor(timeLeft / 60);
   const seconds = timeLeft % 60;
 
+  // Verify OTP and complete registration.
   async function handleVerifyOTP() {
     if (!otpCode.trim() || otpCode.length !== 6) {
       Alert.alert('Lỗi', 'Vui lòng nhập mã OTP 6 chữ số');
@@ -93,6 +95,7 @@ export default function OTPVerificationScreen({
     }
   }
 
+  // Resend OTP and reset countdown.
   async function handleResendOTP() {
     try {
       setResendDisabled(true);

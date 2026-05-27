@@ -1,3 +1,4 @@
+// Admin-only: delete a user by id.
 export async function deleteUser(targetUserId: number, userId?: number) {
   const resolvedUserId = resolveUserId(userId);
   if (typeof resolvedUserId !== 'number') {
@@ -14,7 +15,7 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { getSessionUserId } from '@/utils/session';
 
 /**
- * Chỉ gốc server (không có /api/v1) vì các path trong file này đã bắt đầu bằng /api/...
+ * Resolve backend origin (paths in this file already include /api/...)
  */
 function resolveApiOrigin(): string {
   const envValue = process.env.EXPO_PUBLIC_API_URL?.trim();
@@ -41,8 +42,10 @@ function resolveApiOrigin(): string {
   return 'http://10.0.2.2:8080';
 }
 
+// Base URL used for all API requests.
 export const API_BASE_URL = resolveApiOrigin();
 
+// Normalize media URLs returned by backend.
 export function resolveMediaUrl(rawUrl?: string | null): string {
   const value = (rawUrl ?? '').trim();
   if (!value) return '';
@@ -59,6 +62,7 @@ type RequestOptions = RequestInit & {
   userId?: number | null;
 };
 
+// Prefer explicit userId, fallback to session.
 function resolveUserId(explicitUserId?: number | null) {
   if (typeof explicitUserId === 'number') {
     return explicitUserId;
@@ -66,6 +70,7 @@ function resolveUserId(explicitUserId?: number | null) {
   return getSessionUserId();
 }
 
+// Shared fetch wrapper with error normalization and X-User-Id header.
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { userId, headers, ...rest } = options;
   const resolvedUserId = resolveUserId(userId);
@@ -134,6 +139,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   return response.json() as Promise<T>;
 }
 
+// Auth responses returned from backend.
 export type AuthRes = {
   id: number;
   username: string;
@@ -143,6 +149,7 @@ export type AuthRes = {
   role: string;
 };
 
+// Payload for user registration.
 export type RegisterPayload = {
   username: string;
   password: string;
@@ -151,29 +158,35 @@ export type RegisterPayload = {
   avatarUrl?: string;
 };
 
+// Payload for login.
 export type LoginPayload = {
   identifier: string;
   password: string;
 };
 
+// Payload for forgot-password OTP request.
 export type ForgotPasswordPayload = {
   email: string;
 };
 
+// Payload for resetting password after OTP verification.
 export type ResetPasswordPayload = {
   email: string;
   newPassword: string;
 };
 
+// Payload for sending OTP.
 export type SendOTPPayload = {
   email: string;
 };
 
+// Payload for verifying OTP.
 export type VerifyOTPPayload = {
   email: string;
   otpCode: string;
 };
 
+// Payload for completing registration after OTP.
 export type CompleteRegistrationPayload = {
   username: string;
   password: string;
@@ -182,12 +195,14 @@ export type CompleteRegistrationPayload = {
   avatarUrl?: string;
 };
 
+// OTP response from backend.
 export type OTPRes = {
   message: string;
   email?: string;
   expiryMinutes?: number;
 };
 
+// Basic user profile returned by backend.
 export type UserProfile = {
   id: number;
   username: string;
@@ -268,6 +283,7 @@ export type UpdateTripStopPayload = {
   note?: string | null;
 };
 
+// Community post with interaction metadata.
 export type CommunityPost = {
   id: number;
   userId: number;
@@ -289,6 +305,7 @@ export type CommunityPost = {
   isSaved: number;
 };
 
+// Payload for creating/updating community posts.
 export type CommunityPostPayload = {
   tripId?: number | null;
   title: string;
@@ -299,15 +316,18 @@ export type CommunityPostPayload = {
   budget?: number | null;
 };
 
+// Response for image upload endpoints.
 export type UploadImageRes = {
   imageUrl: string;
 };
 
+// Aggregated admin dashboard payload.
 export type AdminDashboardRes = {
   users: UserProfile[];
   posts: CommunityPost[];
 };
 
+// Register a new account (step 1).
 export async function register(payload: RegisterPayload) {
   return request<AuthRes>('/api/v1/auth/register', {
     method: 'POST',
@@ -315,6 +335,7 @@ export async function register(payload: RegisterPayload) {
   });
 }
 
+// Login by username/email and password.
 export async function login(payload: LoginPayload) {
   return request<AuthRes>('/api/v1/auth/login', {
     method: 'POST',
@@ -322,6 +343,7 @@ export async function login(payload: LoginPayload) {
   });
 }
 
+// Send OTP for forgot-password flow.
 export async function sendForgotPasswordOTP(payload: ForgotPasswordPayload) {
   return request<OTPRes>('/api/v1/auth/forgot-password/send-otp', {
     method: 'POST',
@@ -329,6 +351,7 @@ export async function sendForgotPasswordOTP(payload: ForgotPasswordPayload) {
   });
 }
 
+// Verify OTP for forgot-password flow.
 export async function verifyForgotPasswordOTP(payload: VerifyOTPPayload) {
   return request<{ message: string }>('/api/v1/auth/forgot-password/verify-otp', {
     method: 'POST',
@@ -336,6 +359,7 @@ export async function verifyForgotPasswordOTP(payload: VerifyOTPPayload) {
   });
 }
 
+// Reset password after OTP verification.
 export async function resetForgotPassword(payload: ResetPasswordPayload) {
   return request<{ message: string }>('/api/v1/auth/forgot-password/reset', {
     method: 'POST',
@@ -343,6 +367,7 @@ export async function resetForgotPassword(payload: ResetPasswordPayload) {
   });
 }
 
+// Send OTP for registration.
 export async function sendOTP(payload: SendOTPPayload) {
   return request<OTPRes>('/api/v1/auth/send-otp', {
     method: 'POST',
@@ -350,6 +375,7 @@ export async function sendOTP(payload: SendOTPPayload) {
   });
 }
 
+// Verify OTP for registration.
 export async function verifyOTP(payload: VerifyOTPPayload) {
   return request<{ message: string }>('/api/v1/auth/verify-otp', {
     method: 'POST',
@@ -357,6 +383,7 @@ export async function verifyOTP(payload: VerifyOTPPayload) {
   });
 }
 
+// Complete registration after OTP is verified.
 export async function completeRegistration(payload: CompleteRegistrationPayload) {
   return request<AuthRes>('/api/v1/auth/complete-registration', {
     method: 'POST',
@@ -364,10 +391,12 @@ export async function completeRegistration(payload: CompleteRegistrationPayload)
   });
 }
 
+// Fetch current user's profile.
 export async function getMyProfile(userId?: number) {
   return request<UserProfile>('/api/v1/users/me', { userId, method: 'GET' });
 }
 
+// Update current user's profile and optional password.
 export async function updateMyProfile(
   payload: Partial<UserProfile> & { password?: string; currentPassword?: string },
   userId?: number
@@ -384,6 +413,7 @@ export async function updateMyProfile(
   });
 }
 
+// Upload avatar image and return new URL.
 export async function uploadAvatar(fileUri: string, userId?: number) {
   const resolvedUserId = resolveUserId(userId);
   if (typeof resolvedUserId !== 'number') {
@@ -408,6 +438,7 @@ export async function uploadAvatar(fileUri: string, userId?: number) {
   });
 }
 
+// Fetch trips for current user.
 export async function getMyTrips(userId?: number) {
   const resolvedUserId = resolveUserId(userId);
   if (typeof resolvedUserId !== 'number') {
@@ -526,14 +557,17 @@ export async function declineInvitation(memberId: number, userId?: number) {
   });
 }
 
+// Fetch community feed posts.
 export async function getCommunityFeed(userId?: number) {
   return request<CommunityPost[]>('/api/v2/community/posts', { userId, method: 'GET' });
 }
 
+// Fetch a single community post.
 export async function getCommunityPost(postId: number, userId?: number) {
   return request<CommunityPost>(`/api/v2/community/posts/${postId}`, { userId, method: 'GET' });
 }
 
+// Fetch saved posts for current user.
 export async function getSavedCommunityPosts(userId?: number) {
   const resolvedUserId = resolveUserId(userId);
   if (typeof resolvedUserId !== 'number') {
@@ -543,6 +577,7 @@ export async function getSavedCommunityPosts(userId?: number) {
   return request<CommunityPost[]>(`/api/v2/community/users/${resolvedUserId}/saved`, { userId: resolvedUserId, method: 'GET' });
 }
 
+// Create a new community post.
 export async function createCommunityPost(payload: CommunityPostPayload, userId?: number) {
   return request<CommunityPost>('/api/v2/community/posts', {
     userId,
@@ -551,6 +586,7 @@ export async function createCommunityPost(payload: CommunityPostPayload, userId?
   });
 }
 
+// Upload a single community image with basic client-side resize.
 export async function uploadCommunityImage(fileUri: string, userId?: number) {
   const resolvedUserId = resolveUserId(userId);
   if (typeof resolvedUserId !== 'number') {
@@ -586,6 +622,7 @@ export async function uploadCommunityImage(fileUri: string, userId?: number) {
   });
 }
 
+// Upload multiple community images sequentially.
 export async function uploadCommunityImages(fileUris: string[], userId?: number) {
   const imageUrls: string[] = [];
 
@@ -618,6 +655,7 @@ export async function uploadCommunityImages(fileUris: string[], userId?: number)
   return imageUrls;
 }
 
+// Update an existing community post.
 export async function updateCommunityPost(postId: number, payload: CommunityPostPayload, userId?: number) {
   return request<CommunityPost>(`/api/v2/community/posts/${postId}`, {
     userId,
@@ -626,6 +664,7 @@ export async function updateCommunityPost(postId: number, payload: CommunityPost
   });
 }
 
+// Delete a community post (owner or admin).
 export async function deleteCommunityPost(postId: number, userId?: number) {
   return request<void>(`/api/v2/community/posts/${postId}`, {
     userId,
@@ -633,6 +672,7 @@ export async function deleteCommunityPost(postId: number, userId?: number) {
   });
 }
 
+// Toggle like on a community post.
 export async function toggleLike(postId: number, userId?: number) {
   return request('/api/v2/community/posts/' + postId + '/likes/toggle', {
     userId,
@@ -640,6 +680,7 @@ export async function toggleLike(postId: number, userId?: number) {
   });
 }
 
+// Toggle save on a community post.
 export async function toggleSave(postId: number, userId?: number) {
   return request('/api/v2/community/posts/' + postId + '/saves/toggle', {
     userId,
@@ -647,6 +688,7 @@ export async function toggleSave(postId: number, userId?: number) {
   });
 }
 
+// Admin: list all users.
 export async function getAdminUsers(userId?: number) {
   const resolvedUserId = resolveUserId(userId);
   if (typeof resolvedUserId !== 'number') {
@@ -658,11 +700,13 @@ export async function getAdminUsers(userId?: number) {
   });
 }
 
+// Admin: dashboard aggregates users and posts.
 export async function getAdminDashboard(userId?: number): Promise<AdminDashboardRes> {
   const [users, posts] = await Promise.all([getAdminUsers(userId), getCommunityFeed(userId)]);
   return { users, posts };
 }
 
+// Admin: update user role.
 export async function updateAdminUserRole(targetUserId: number, role: 'USER' | 'ADMIN', userId?: number) {
   const resolvedUserId = resolveUserId(userId);
   if (typeof resolvedUserId !== 'number') {

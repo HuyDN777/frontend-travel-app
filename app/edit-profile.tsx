@@ -16,6 +16,7 @@ import { getMyProfile, resolveMediaUrl, updateMyProfile, uploadAvatar } from '@/
 import { moderateScale } from '@/utils/responsive';
 import { clearSessionUser, getSessionUser, getSessionUserId, setSessionUser } from '@/utils/session';
 
+// Profile edit screen with avatar upload and password change.
 export default function EditProfileScreen() {
   const router = useRouter();
   const scheme = useColorScheme() ?? 'light';
@@ -31,6 +32,7 @@ export default function EditProfileScreen() {
   const [newPassword, setNewPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Pick avatar image from media library.
   async function handlePickAvatarFromLibrary() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
@@ -49,6 +51,7 @@ export default function EditProfileScreen() {
     setSelectedAvatarUri(uri);
   }
 
+  // Capture avatar image from camera.
   async function handleTakeAvatarPhoto() {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
@@ -97,6 +100,7 @@ export default function EditProfileScreen() {
     };
   }, []);
 
+  // Save profile changes and optional password update.
   async function handleSave() {
     const userId = getSessionUserId();
     if (!userId) {

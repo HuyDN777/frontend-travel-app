@@ -7,6 +7,7 @@ import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { useAdminDashboard } from '@/hooks/use-admin-dashboard';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
+// Admin logs screen summarizing metrics.
 export default function AdminLogsScreen() {
   const scheme = useColorScheme() ?? 'light';
   const palette = Colors[scheme];
