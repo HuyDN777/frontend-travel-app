@@ -20,6 +20,7 @@ import {
 import { moderateScale } from '@/utils/responsive';
 import { getSessionUserId } from '@/utils/session';
 
+// List current user's community posts with actions.
 export default function CommunityMyPostsScreen() {
   const scheme = useColorScheme() ?? 'light';
   const palette = Colors[scheme];
@@ -36,6 +37,7 @@ export default function CommunityMyPostsScreen() {
     [posts, userId]
   );
 
+  // Load community feed and filter by current user.
   const loadFeed = useCallback(async () => {
     if (!userId) {
       router.replace('/login');
@@ -57,6 +59,7 @@ export default function CommunityMyPostsScreen() {
     void loadFeed();
   }, [loadFeed]);
 
+  // Refresh feed list.
   async function handleRefresh() {
     if (!userId) return;
     try {
@@ -71,6 +74,7 @@ export default function CommunityMyPostsScreen() {
     }
   }
 
+  // Toggle like then reload feed.
   async function handleLike(postId: number) {
     if (!userId) return;
     try {
@@ -82,6 +86,7 @@ export default function CommunityMyPostsScreen() {
     }
   }
 
+  // Toggle save then reload feed.
   async function handleSave(postId: number) {
     if (!userId) return;
     try {
@@ -93,6 +98,7 @@ export default function CommunityMyPostsScreen() {
     }
   }
 
+  // Share post content using native share sheet.
   async function handleShare(post: CommunityPost) {
     try {
       const message = [post.title, post.content, post.location].filter(Boolean).join('\n');
@@ -102,10 +108,12 @@ export default function CommunityMyPostsScreen() {
     }
   }
 
+  // Navigate to editor for update.
   function handleEdit(postId: number) {
     router.push({ pathname: '/community-post-editor', params: { postId: String(postId) } });
   }
 
+  // Confirm and delete post.
   async function handleDelete(postId: number) {
     Alert.alert('Xóa bài', 'Bạn có chắc muốn xóa bài viết?', [
       { text: 'Hủy', style: 'cancel' },

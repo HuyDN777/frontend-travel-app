@@ -10,11 +10,13 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { updateAdminUserRole, deleteUser, type UserProfile } from '@/utils/api';
 import { getSessionUserId } from '@/utils/session';
 
+// Admin user management screen.
 export default function AdminUsersScreen() {
   const scheme = useColorScheme() ?? 'light';
   const palette = Colors[scheme];
   const { users, loading, reload } = useAdminDashboard();
 
+  // Delete a user after confirmation.
   async function handleDeleteUser(user: UserProfile) {
     Alert.alert(
       'Xác nhận xóa',
@@ -38,6 +40,7 @@ export default function AdminUsersScreen() {
     );
   }
 
+  // Placeholder for future add-user flow.
   function handleAddUser() {
     Alert.alert('Chức năng thêm người dùng sẽ được cập nhật sau!');
   }

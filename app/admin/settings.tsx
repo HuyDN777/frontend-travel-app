@@ -41,6 +41,7 @@ const settingItems: SettingItem[] = [
   },
 ];
 
+// Admin settings dashboard (client-side toggles).
 export default function AdminSettingsScreen() {
   const scheme = useColorScheme() ?? 'light';
   const palette = Colors[scheme];

@@ -11,12 +11,14 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { deleteCommunityPost, type CommunityPost } from '@/utils/api';
 import { getSessionUserId } from '@/utils/session';
 
+// Admin moderation screen for community posts.
 export default function AdminModerationScreen() {
   const scheme = useColorScheme() ?? 'light';
   const palette = Colors[scheme];
   const { moderationQueue, loading, reload } = useAdminDashboard();
   const [selectedPost, setSelectedPost] = useState<CommunityPost | null>(null);
 
+  // Delete a post from moderation queue.
   async function handleDelete(postId: number) {
     const userId = getSessionUserId();
     if (!userId) return;
@@ -29,6 +31,7 @@ export default function AdminModerationScreen() {
     }
   }
 
+  // Confirm destructive delete action.
   function confirmDelete(postId: number) {
     Alert.alert(
       'Xóa bài viết',
@@ -40,6 +43,7 @@ export default function AdminModerationScreen() {
     );
   }
 
+  // Show selected post details in modal.
   function handleReview(post: CommunityPost) {
     setSelectedPost(post);
   }

@@ -2,6 +2,7 @@ import { Stack } from 'expo-router';
 
 import { AccessGate } from '@/components/auth/access-gate';
 
+// Admin area layout guarded by role-based access.
 export default function AdminLayout() {
   return (
     <AccessGate required="admin">

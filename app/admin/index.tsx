@@ -18,6 +18,7 @@ type MenuCardProps = {
   onPress: () => void;
 };
 
+// Small menu card used for admin navigation shortcuts.
 function MenuCard({ icon, title, subtitle, badge, badgeTone = 'neutral', onPress }: MenuCardProps) {
   const scheme = useColorScheme() ?? 'light';
   const palette = Colors[scheme];
@@ -53,6 +54,7 @@ function MenuCard({ icon, title, subtitle, badge, badgeTone = 'neutral', onPress
   );
 }
 
+// Admin dashboard with metrics and navigation.
 export default function AdminDashboardScreen() {
   const router = useRouter();
   const scheme = useColorScheme() ?? 'light';

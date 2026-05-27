@@ -17,6 +17,7 @@ import { completeRegistration, sendOTP, verifyOTP } from '@/utils/api';
 import { moderateScale } from '@/utils/responsive';
 import { setSessionUser } from '@/utils/session';
 
+// Sign-up screen with OTP email verification.
 export default function SignUpScreen() {
   const OTP_RESEND_COOLDOWN_SECONDS = 60;
 
@@ -58,6 +59,7 @@ export default function SignUpScreen() {
     return emailRegex.test(emailStr);
   };
 
+  // Send OTP to verify email before registration.
   async function handleSendOtp() {
     if (sendingOtp) {
       return;
@@ -91,6 +93,7 @@ export default function SignUpScreen() {
     }
   }
 
+  // Verify OTP sent to email.
   async function handleVerifyOtp() {
     if (!otpSent) {
       Alert.alert('Chưa gửi OTP', 'Vui lòng bấm Xác thực email để lấy mã OTP trước.');
@@ -117,6 +120,7 @@ export default function SignUpScreen() {
     }
   }
 
+  // Complete registration after OTP verification.
   async function handleSignUp() {
     if (!fullName.trim() || !username.trim() || !email.trim() || !password.trim()) {
       Alert.alert('Thiếu thông tin', 'Vui lòng điền đầy đủ các ô bắt buộc.');

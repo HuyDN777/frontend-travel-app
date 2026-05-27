@@ -19,6 +19,7 @@ import { setSessionUser } from '@/utils/session';
 
 type ForgotStep = 'otp' | 'password';
 
+// Login screen with forgot-password flow.
 export default function LoginScreen() {
   const OTP_COOLDOWN_SECONDS = 60;
 
@@ -75,6 +76,7 @@ export default function LoginScreen() {
     setConfirmNewPassword('');
   }
 
+  // Authenticate and route by role.
   async function handleLogin() {
     if (!identifier.trim() || !password.trim()) {
       Alert.alert('Thiếu thông tin', 'Vui lòng nhập email hoặc tên đăng nhập và mật khẩu.');
@@ -109,6 +111,7 @@ export default function LoginScreen() {
     }
   }
 
+  // Send OTP for forgot-password flow.
   async function handleSendForgotOtp() {
     if (sendingForgotOtp || forgotOtpCooldown > 0) {
       return;
@@ -136,6 +139,7 @@ export default function LoginScreen() {
     }
   }
 
+  // Verify OTP before allowing password reset.
   async function handleVerifyForgotOtp() {
     if (!forgotEmail.trim() || !forgotOtp.trim()) {
       Alert.alert('Thiếu thông tin', 'Vui lòng nhập email và OTP.');
@@ -162,6 +166,7 @@ export default function LoginScreen() {
     }
   }
 
+  // Reset password after OTP verification.
   async function handleResetPassword() {
     if (!newPassword.trim() || !confirmNewPassword.trim()) {
       Alert.alert('Thiếu thông tin', 'Vui lòng nhập mật khẩu mới và xác nhận mật khẩu.');

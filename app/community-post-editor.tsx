@@ -25,6 +25,7 @@ import { getSessionUser, getSessionUserId } from '@/utils/session';
 
 const MAX_IMAGES = 5;
 
+// Create/update community post with images.
 export default function CommunityPostEditorScreen() {
   const user = getSessionUser();
   const router = useRouter();
@@ -73,6 +74,7 @@ export default function CommunityPostEditorScreen() {
     };
   }, [isEdit, postId]);
 
+  // Pick images from library with max count.
   async function handlePickImageFromLibrary() {
     const currentCount = imageUrls.length + pickedImageUris.length;
     const remainingSlots = MAX_IMAGES - currentCount;
@@ -103,6 +105,7 @@ export default function CommunityPostEditorScreen() {
     setPickedImageUris((prev) => [...prev, ...uris].slice(0, MAX_IMAGES));
   }
 
+  // Capture a photo for the post.
   async function handleTakePhoto() {
     const currentCount = imageUrls.length + pickedImageUris.length;
     if (currentCount >= MAX_IMAGES) {
@@ -134,6 +137,7 @@ export default function CommunityPostEditorScreen() {
     setImageUrls((prev) => prev.filter((item) => item !== uri));
   }
 
+  // Upload images and submit create/update request.
   async function handleSubmit() {
     if (!getSessionUserId()) {
       router.replace('/login');

@@ -32,6 +32,7 @@ const mobilePrimaryNav: NavItem[] = [
   { key: 'dashboard', label: 'Dashboard', route: '/admin', icon: 'shield-checkmark-outline' },
 ];
 
+// Determine active nav item for current route.
 function isActivePath(pathname: string, route: NavItem['route']) {
   if (route === '/admin') {
     return pathname === '/admin';
@@ -40,6 +41,7 @@ function isActivePath(pathname: string, route: NavItem['route']) {
   return pathname.startsWith(route);
 }
 
+// Shared admin layout shell with navigation and logout.
 export function AdminShell({ title, subtitle, rightAction, children }: AdminShellProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -48,6 +50,7 @@ export function AdminShell({ title, subtitle, rightAction, children }: AdminShel
   const { width } = useWindowDimensions();
   const desktop = width >= 920;
 
+  // Clear session and return to login.
   function handleLogout() {
     clearSessionUser();
     router.replace('/login');
